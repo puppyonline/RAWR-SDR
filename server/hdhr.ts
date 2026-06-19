@@ -17,19 +17,34 @@
 import { Router, Request, Response } from 'express';
 import http from 'http';
 import https from 'https';
-import { spawn } from 'child_process';
-import { createRequire } from 'module';
+import { spawn, execSync } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 
-// Get ffmpeg binary path from ffmpeg-static package
-const require = createRequire(import.meta.url);
-let ffmpegPath: string;
+// Find ffmpeg binary: try ffmpeg-static package first, then system PATH
+let ffmpegPath = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
 try {
-  ffmpegPath = require('ffmpeg-static');
-  console.log(`[HDHR] ffmpeg: ${ffmpegPath}`);
-} catch {
-  ffmpegPath = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-  console.log(`[HDHR] ffmpeg-static not found, falling back to PATH: ${ffmpegPath}`);
-}
+  // Look for ffmpeg-static in node_modules
+  const staticPath = path.resolve('node_modules', 'ffmpeg-static', 'ffmpeg.exe');
+  const staticPathUnix = path.resolve('node_modules', 'ffmpeg-static', 'ffmpeg');
+  const candidate = process.platform === 'win32' ? staticPath : staticPathUnix;
+  if (fs.existsSync(candidate)) {
+    ffmpegPath = candidate;
+  } else {
+    // Try requiring it (handles different install locations)
+    const resolved = path.resolve('node_modules', 'ffmpeg-static', 'index.js');
+    if (fs.existsSync(resolved)) {
+      // Read the package to find the binary path
+      const pkg = JSON.parse(fs.readFileSync(path.resolve('node_modules', 'ffmpeg-static', 'package.json'), 'utf-8'));
+      const binDir = path.resolve('node_modules', 'ffmpeg-static');
+      const files = fs.readdirSync(binDir);
+      const bin = files.find(f => f === 'ffmpeg' || f === 'ffmpeg.exe');
+      if (bin) ffmpegPath = path.join(binDir, bin);
+    }
+  }
+} catch { /* use system ffmpeg */ }
+console.log(`[HDHR] ffmpeg path: ${ffmpegPath}`);
 
 const router = Router();
 
@@ -167,14 +182,19 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
   const ffmpeg = spawn(ffmpegPath, [
     '-i', streamUrl,
-    '-c:v', 'libx264',        // H.264 video (browser compatible)
-    '-preset', 'veryfast',     // low latency encoding
-    '-tune', 'zerolatency',    // minimize latency
-    '-c:a', 'aac',             // AAC audio (browser compatible)
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-tune', 'zerolatency',
+    '-profile:v', 'baseline',    // most compatible H.264 profile
+    '-level', '3.1',
+    '-g', '30',                  // keyframe every 30 frames (1 sec at 30fps)
+    '-c:a', 'aac',
     '-b:a', '128k',
-    '-f', 'mpegts',            // output as MPEG-TS (mpegts.js can demux)
-    '-movflags', '+faststart',
-    'pipe:1',                  // output to stdout
+    '-ar', '44100',              // standard audio sample rate
+    '-ac', '2',                  // stereo
+    '-f', 'mpegts',
+    '-mpegts_flags', 'resend_headers', // resend PAT/PMT periodically
+    'pipe:1',
   ], {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
