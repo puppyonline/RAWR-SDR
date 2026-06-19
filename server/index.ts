@@ -307,16 +307,15 @@ app.post('/api/tune', async (req, res) => {
     } else if (mode === 'noaa') {
       // === NOAA Weather Radio: narrowband FM on 162.4-162.55 MHz ===
       // NOAA uses narrowband FM with ~5kHz deviation (16kHz channel spacing).
-      // Use a lower sample rate for proper narrowband demod.
-      // E4000 gain 34 dB is good for the 162 MHz band.
+      // NO de-emphasis (NWR doesn't use pre-emphasis like broadcast FM).
+      // Lower gain to avoid E4000 overload from strong nearby transmitter.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '48k',
-        '-g', '34',
+        '-g', '21',
         '-l', '0',
-        '-E', 'deemp',
       ];
 
       console.log(`[RAWR-SDR] NOAA: ${rtlFm} ${args.join(' ')}`);
