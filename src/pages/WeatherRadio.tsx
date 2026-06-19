@@ -41,16 +41,11 @@ interface WeatherData {
   }>;
 }
 
-// NOAA Weather Radio frequencies for Phoenix/Mesa area
-// NWR broadcasts on 7 frequencies nationwide. Phoenix uses these:
+// NOAA Weather Radio frequencies receivable from Mesa, AZ (85202)
+// Only Phoenix-area transmitters within ~40 mile range
 const stations = [
-  { freq: 162.550, label: 'WXL-58', desc: 'Phoenix/Mesa (primary)', area: 'Maricopa County', power: '300W' },
-  { freq: 162.400, label: 'KEC-81', desc: 'Phoenix/Scottsdale', area: 'Central Maricopa', power: '300W' },
-  { freq: 162.475, label: 'WNG-720', desc: 'Prescott/Yavapai', area: 'Yavapai County', power: '300W' },
-  { freq: 162.425, label: 'WXJ-69', desc: 'Tucson', area: 'Pima County', power: '1000W' },
-  { freq: 162.450, label: 'WXL-59', desc: 'Flagstaff', area: 'Coconino County', power: '300W' },
-  { freq: 162.500, label: 'KIH-26', desc: 'Globe/Payson', area: 'Gila County', power: '300W' },
-  { freq: 162.525, label: 'WXK-88', desc: 'Kingman', area: 'Mohave County', power: '300W' },
+  { freq: 162.550, label: 'WXL-58', desc: 'Phoenix (primary)', area: 'Maricopa County', power: '300W' },
+  { freq: 162.500, label: 'KEC-81', desc: 'Globe / Signal Peak (weak)', area: 'Gila County', power: '300W' },
 ];
 
 function WeatherRadio() {

@@ -8,7 +8,6 @@ import { useAudioStream } from '../hooks/useAudioStream';
 const presets = [
   { freq: 550, label: 'KFYI', format: 'News/Talk' },
   { freq: 620, label: 'KTAR', format: 'Sports (ESPN)' },
-  { freq: 740, label: 'KRMG', format: 'Talk' },
   { freq: 860, label: 'KMVP', format: 'Sports' },
   { freq: 910, label: 'KGME', format: 'Sports' },
   { freq: 960, label: 'KKNT', format: 'Conservative Talk' },
@@ -17,7 +16,6 @@ const presets = [
   { freq: 1060, label: 'KDUS', format: 'Talk' },
   { freq: 1100, label: 'KFNX', format: 'Progressive' },
   { freq: 1190, label: 'KNUV', format: 'Variety' },
-  { freq: 1230, label: 'KAZM', format: 'Talk' },
   { freq: 1310, label: 'KXAM', format: 'Spanish' },
   { freq: 1360, label: 'KLNZ', format: 'Spanish Talk' },
   { freq: 1400, label: 'KCTK', format: 'Catholic' },
