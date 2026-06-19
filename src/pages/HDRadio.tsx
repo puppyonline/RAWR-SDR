@@ -93,16 +93,16 @@ function HDRadio() {
 
   return (
     <div className="space-y-3">
-      <div className="card p-6">
+      <div className="card p-5">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">HD Radio</h2>
-            <p className="text-xs text-white/30 font-mono mt-0.5">87.5 &ndash; 108.0 MHz &middot; NRSC-5</p>
+            <p className="text-xs text-zinc-500 font-mono mt-0.5">87.5 &ndash; 108.0 MHz &middot; NRSC-5</p>
           </div>
           <div className="flex items-center gap-3">
             {audio.error && <span className="text-xs text-danger mr-2">{audio.error}</span>}
-            {audio.isConnecting && <span className="text-xs text-white/40 mr-2">Tuning...</span>}
-            <button onClick={togglePower} className={power ? 'btn-danger' : 'btn-primary'}>
+            {audio.isConnecting && <span className="text-xs text-zinc-500">Tuning...</span>}
+            <button onClick={togglePower} className={power ? 'btn-danger btn-sm' : 'btn-brand btn-sm'}>
               {power ? 'Power Off' : 'Power On'}
             </button>
           </div>
@@ -110,7 +110,7 @@ function HDRadio() {
 
         <div className="flex items-baseline gap-3 mb-4">
           <span className="freq-display">{frequency.toFixed(1)}</span>
-          <span className="text-sm text-white/30">MHz</span>
+          <span className="text-sm text-zinc-500">MHz</span>
           <span className="badge bg-purple-500/10 text-purple-400 border border-purple-500/20 ml-3">HD{hdChannel}</span>
           {power && audio.isPlaying && (
             <div className="flex items-center gap-1.5 ml-3">
@@ -139,17 +139,17 @@ function HDRadio() {
             <input type="number" min={87.5} max={108.0} step={0.2} value={frequency}
               onChange={(e) => setFrequency(Number(Number(e.target.value).toFixed(1)))}
               className="input w-28 font-mono text-center text-sm" />
-            <span className="text-xs text-white/25">MHz</span>
+            <span className="text-xs text-zinc-100/25">MHz</span>
           </div>
           <div className="flex-1 flex items-center gap-3">
-            <span className="text-xs text-white/30">Vol</span>
+            <span className="text-xs text-zinc-500">Vol</span>
             <input type="range" min="0" max="100" value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
-              className="flex-1 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
+              className="flex-1 h-1 bg-bg-raised rounded-full appearance-none cursor-pointer
                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
                          [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
                          [&::-webkit-slider-thumb]:bg-purple-400" />
-            <span className="text-xs font-mono text-white/30 w-8">{volume}%</span>
+            <span className="text-xs font-mono text-zinc-500 w-8">{volume}%</span>
           </div>
         </div>
       </div>
@@ -160,8 +160,8 @@ function HDRadio() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {Object.entries(metadata).map(([key, val]) => (
             <div key={key} className="card-inner p-3">
-              <p className="text-[10px] text-white/30 uppercase tracking-wide mb-1">{key}</p>
-              <p className="text-sm font-medium text-white/80 truncate">{val}</p>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">{key}</p>
+              <p className="text-sm font-medium text-zinc-200 truncate">{val}</p>
             </div>
           ))}
         </div>
@@ -191,11 +191,11 @@ function HDRadio() {
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[10px] text-white/30 truncate">{p.label}</span>
+                <span className="text-[10px] text-zinc-500 truncate">{p.label}</span>
                 {p.ch > 1 && <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1 rounded">HD{p.ch}</span>}
               </div>
               <div className="text-xs font-mono font-medium">{p.freq}</div>
-              <div className="text-[9px] text-white/20 mt-0.5 truncate">{p.format}</div>
+              <div className="text-[9px] text-zinc-100/20 mt-0.5 truncate">{p.format}</div>
             </button>
           ))}
         </div>

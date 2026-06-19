@@ -7,15 +7,15 @@ interface FrequencyDialProps {
   color?: string;
 }
 
-function FrequencyDial({ value, onChange, min, max, step, color = '#6366f1' }: FrequencyDialProps) {
+function FrequencyDial({ value, onChange, min, max, step, color = '#3b82f6' }: FrequencyDialProps) {
   const pct = ((value - min) / (max - min)) * 100;
 
   return (
-    <div className="space-y-2">
-      <div className="relative h-2 bg-surface-2 rounded-full overflow-hidden">
+    <div className="space-y-1.5">
+      <div className="relative h-1.5 bg-bg-raised rounded-full overflow-hidden">
         <div
           className="absolute top-0 left-0 h-full rounded-full transition-all duration-75"
-          style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}40, ${color})` }}
+          style={{ width: `${pct}%`, background: color }}
         />
         <input
           type="range"
@@ -26,13 +26,12 @@ function FrequencyDial({ value, onChange, min, max, step, color = '#6366f1' }: F
           onChange={(e) => onChange(Number(e.target.value))}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         />
-        {/* Thumb indicator */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 bg-surface-0 shadow-lg pointer-events-none transition-all duration-75"
-          style={{ left: `calc(${pct}% - 8px)`, borderColor: color }}
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 bg-bg shadow-md pointer-events-none transition-all duration-75"
+          style={{ left: `calc(${pct}% - 6px)`, borderColor: color }}
         />
       </div>
-      <div className="flex justify-between text-[10px] font-mono text-white/25">
+      <div className="flex justify-between text-2xs font-mono text-zinc-600">
         <span>{min}</span>
         <span>{max}</span>
       </div>

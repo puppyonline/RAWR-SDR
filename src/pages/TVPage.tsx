@@ -147,11 +147,11 @@ function TVPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Live TV</h2>
-            <p className="text-xs text-white/30 font-mono mt-0.5">HDHomeRun Flex 4K &middot; OTA Broadcast</p>
+            <p className="text-xs text-zinc-500 font-mono mt-0.5">HDHomeRun Flex 4K &middot; OTA Broadcast</p>
           </div>
           <div className="flex items-center gap-3">
             {error && <span className="text-xs text-danger">{error}</span>}
-            <span className={`badge ${hdhrStatus?.connected ? 'badge-success' : 'badge-danger'}`}>
+            <span className={`badge ${hdhrStatus?.connected ? 'badge-live' : 'bg-danger/10 text-danger border border-danger/20'}`}>
               {hdhrStatus?.connected ? 'HDHomeRun Connected' : 'No Device'}
             </span>
           </div>
@@ -170,10 +170,10 @@ function TVPage() {
               controls
             />
             {!isPlaying && (
-              <div className="absolute inset-0 flex items-center justify-center bg-surface-2">
+              <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
                 <div className="text-center">
                   <div className="text-4xl mb-2 opacity-30">📺</div>
-                  <p className="text-sm text-white/30">Select a channel to start watching</p>
+                  <p className="text-sm text-zinc-500">Select a channel to start watching</p>
                 </div>
               </div>
             )}
@@ -183,11 +183,11 @@ function TVPage() {
             <div className="p-4 border-t border-white/[0.06] flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono font-semibold text-accent">{selectedChannel.GuideNumber}</span>
+                  <span className="text-sm font-mono font-semibold text-brand">{selectedChannel.GuideNumber}</span>
                   <span className="text-sm font-medium">{selectedChannel.GuideName}</span>
                 </div>
                 {getCurrentProgram(selectedChannel.GuideNumber) && (
-                  <p className="text-xs text-white/40 mt-0.5">
+                  <p className="text-xs text-zinc-500 mt-0.5">
                     {getCurrentProgram(selectedChannel.GuideNumber)?.Title}
                   </p>
                 )}
@@ -199,7 +199,7 @@ function TVPage() {
 
         {/* Channel List */}
         <div className="card p-0 max-h-[600px] overflow-y-auto">
-          <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-surface-1 z-10">
+          <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-bg-card z-10">
             <span className="label">Channels ({channels.length})</span>
           </div>
           <div className="divide-y divide-white/[0.04]">
@@ -213,7 +213,7 @@ function TVPage() {
                   key={ch.GuideNumber}
                   onClick={() => tuneChannel(ch)}
                   className={`w-full text-left px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${
-                    isActive ? 'bg-accent/5 border-l-2 border-accent' : ''
+                    isActive ? 'bg-brand/5 border-l-2 border-brand' : ''
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -222,11 +222,11 @@ function TVPage() {
                         {meta.network}
                       </span>
                     )}
-                    <span className="text-xs font-mono text-white/50 w-8">{ch.GuideNumber}</span>
+                    <span className="text-xs font-mono text-zinc-400 w-8">{ch.GuideNumber}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{ch.GuideName}</div>
                       {program && (
-                        <div className="text-[11px] text-white/30 truncate">{program.Title}</div>
+                        <div className="text-[11px] text-zinc-500 truncate">{program.Title}</div>
                       )}
                     </div>
                   </div>
@@ -234,7 +234,7 @@ function TVPage() {
               );
             })}
             {channels.length === 0 && (
-              <div className="p-6 text-center text-white/30 text-sm">
+              <div className="p-6 text-center text-zinc-500 text-sm">
                 {hdhrStatus?.connected ? 'Loading channels...' : 'No HDHomeRun detected on network'}
               </div>
             )}
@@ -254,14 +254,14 @@ function TVPage() {
 
               return (
                 <div key={ch.GuideNumber} className="flex items-center gap-3 py-2 border-b border-white/[0.03] last:border-0">
-                  <span className="text-xs font-mono text-white/40 w-8 shrink-0">{ch.GuideNumber}</span>
-                  <span className="text-xs text-white/60 w-24 shrink-0 truncate">{ch.GuideName}</span>
+                  <span className="text-xs font-mono text-zinc-500 w-8 shrink-0">{ch.GuideNumber}</span>
+                  <span className="text-xs text-zinc-400 w-24 shrink-0 truncate">{ch.GuideName}</span>
                   <div className="flex-1 min-w-0">
                     {current && (
                       <div className="flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
-                        <span className="text-xs text-white/80 truncate">{current.Title}</span>
-                        <span className="text-[10px] text-white/25 shrink-0">
+                        <span className="text-xs text-zinc-200 truncate">{current.Title}</span>
+                        <span className="text-[10px] text-zinc-100/25 shrink-0">
                           {new Date(current.EndTime * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                         </span>
                       </div>
@@ -269,7 +269,7 @@ function TVPage() {
                     {next && (
                       <div className="flex items-center gap-2 mt-0.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-white/10 shrink-0" />
-                        <span className="text-[11px] text-white/30 truncate">Next: {next.Title}</span>
+                        <span className="text-[11px] text-zinc-500 truncate">Next: {next.Title}</span>
                       </div>
                     )}
                   </div>
