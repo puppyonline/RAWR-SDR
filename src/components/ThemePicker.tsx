@@ -35,7 +35,7 @@ function ThemePicker() {
       {open && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 z-50 bg-card border border-border rounded-lg shadow-xl p-1 min-w-[120px]">
+          <div className="absolute right-0 top-full mt-2 z-50 bg-card border border-edge rounded-lg shadow-xl p-1 min-w-[120px]">
             {themes.map((t) => (
               <button
                 key={t.id}

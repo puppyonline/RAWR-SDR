@@ -6,7 +6,7 @@
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
   }
 
   body {
@@ -79,13 +79,13 @@
 @layer components {
   /* Cards */
   .card {
-    @apply bg-card border border-border rounded-xl;
+    @apply bg-card border border-edge rounded-xl;
   }
   .card-flush {
-    @apply bg-card border border-border rounded-xl overflow-hidden;
+    @apply bg-card border border-edge rounded-xl overflow-hidden;
   }
   .card-inner {
-    @apply bg-raised border border-border rounded-lg;
+    @apply bg-raised border border-edge rounded-lg;
   }
 
   /* Buttons */
@@ -101,7 +101,7 @@
     @apply btn text-secondary bg-hover;
   }
   .btn-ghost:hover {
-    @apply bg-border;
+    @apply bg-edge;
   }
   .btn-danger {
     @apply btn bg-danger/10 hover:bg-danger/20 text-danger border border-danger/20;
@@ -112,7 +112,7 @@
 
   /* Inputs */
   .input {
-    @apply w-full px-3 py-2 bg-raised border border-border rounded-lg
+    @apply w-full px-3 py-2 bg-raised border border-edge rounded-lg
            text-sm text-primary placeholder-muted
            focus:outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20
            transition-colors duration-150;

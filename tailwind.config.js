@@ -9,7 +9,7 @@ export default {
         raised: 'var(--color-raised)',
         card: 'var(--color-card)',
         hover: 'var(--color-hover)',
-        border: 'var(--color-border)',
+        edge: 'var(--color-border)',
         primary: 'var(--color-primary)',
         secondary: 'var(--color-secondary)',
         muted: 'var(--color-muted)',
@@ -41,6 +41,9 @@ export default {
         radio: '#8b5cf6',
         tv: '#06b6d4',
         aviation: '#f97316',
+      },
+      borderColor: {
+        DEFAULT: 'var(--color-border)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

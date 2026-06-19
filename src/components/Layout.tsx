@@ -20,7 +20,7 @@ function Layout() {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Top navigation bar */}
-      <header className="h-14 shrink-0 border-b border-border bg-card flex items-center px-4 gap-4 z-50">
+      <header className="h-14 shrink-0 border-b border-edge bg-card flex items-center px-4 gap-4 z-50">
         {/* Brand */}
         <NavLink to="/" className="flex items-center gap-2 shrink-0 mr-2">
           <div className="w-7 h-7 rounded-md bg-brand/10 border border-brand/20 flex items-center justify-center">
@@ -76,7 +76,7 @@ function Layout() {
         <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <aside
-            className="absolute top-14 left-0 w-64 h-[calc(100%-3.5rem)] bg-card border-r border-border p-4 overflow-y-auto"
+            className="absolute top-14 left-0 w-64 h-[calc(100%-3.5rem)] bg-card border-r border-edge p-4 overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <nav className="space-y-1">

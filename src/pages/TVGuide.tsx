@@ -97,13 +97,13 @@ function TVGuide() {
       {/* EPG Grid */}
       <div className="card-flush overflow-hidden">
         {/* Time header */}
-        <div className="flex border-b border-border bg-card sticky top-0 z-10">
-          <div className="w-32 md:w-40 shrink-0 p-2 border-r border-border">
+        <div className="flex border-b border-edge bg-card sticky top-0 z-10">
+          <div className="w-32 md:w-40 shrink-0 p-2 border-r border-edge">
             <span className="text-2xs text-muted">Channel</span>
           </div>
           <div className="flex-1 relative h-8">
             {timeSlots.map((ts) => (
-              <div key={ts} className="absolute top-0 h-full border-l border-border flex items-center pl-2"
+              <div key={ts} className="absolute top-0 h-full border-l border-edge flex items-center pl-2"
                 style={{ left: `${getPosition(ts)}%` }}>
                 <span className="text-2xs text-muted font-mono">{formatTime(ts)}</span>
               </div>
@@ -115,11 +115,11 @@ function TVGuide() {
         {/* Channel rows */}
         <div ref={gridRef} className="max-h-[calc(100vh-220px)] overflow-y-auto">
           {guide.map((ch) => (
-            <div key={ch.GuideNumber} className="flex border-b border-border last:border-0 hover:bg-hover/30 transition-colors">
+            <div key={ch.GuideNumber} className="flex border-b border-edge last:border-0 hover:bg-hover/30 transition-colors">
               {/* Channel label — click to watch */}
               <button
                 onClick={() => watchChannel(ch.GuideNumber)}
-                className="w-32 md:w-40 shrink-0 p-2 border-r border-border flex items-center gap-2 hover:bg-hover/50 transition-colors text-left"
+                className="w-32 md:w-40 shrink-0 p-2 border-r border-edge flex items-center gap-2 hover:bg-hover/50 transition-colors text-left"
               >
                 <span className="text-xs font-mono text-muted w-7">{ch.GuideNumber}</span>
                 <span className="text-xs text-secondary truncate">{ch.GuideName}</span>
@@ -139,7 +139,7 @@ function TVGuide() {
                       className={`absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden border transition-colors cursor-pointer ${
                         isCurrent
                           ? 'bg-brand/10 border-brand/30 hover:bg-brand/20'
-                          : 'bg-raised border-border hover:bg-hover'
+                          : 'bg-raised border-edge hover:bg-hover'
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                       title={isCurrent ? `${program.Title} — click to watch` : program.Title}
