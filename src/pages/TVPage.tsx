@@ -221,7 +221,7 @@ function TVPage() {
             <span className="text-[10px] text-white/25 ml-2">Use external player for best quality</span>
           </div>
         )}
-        </div>
+      </div>
 
         {/* Channel List */}
         <div className="card p-0 max-h-[600px] overflow-y-auto">
