@@ -46,11 +46,16 @@ function TVPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
 
-  // Fetch lineup and status on mount
+  // Fetch lineup and status on mount (with retry for slow HDHR discovery)
   useEffect(() => {
-    fetchLineup();
-    fetchStatus();
-    fetchGuide();
+    const init = async () => {
+      // Give server a moment to finish pre-fetch discovery
+      await new Promise((r) => setTimeout(r, 300));
+      await fetchStatus();
+      await fetchLineup();
+      fetchGuide();
+    };
+    init();
   }, []);
 
   const fetchStatus = async () => {
@@ -58,6 +63,14 @@ function TVPage() {
       const res = await fetch('/api/hdhr/status');
       const data = await res.json();
       setHdhrStatus(data);
+      // Retry once if not connected (discovery may still be in progress)
+      if (!data?.connected) {
+        setTimeout(async () => {
+          const retry = await fetch('/api/hdhr/status');
+          const d = await retry.json();
+          setHdhrStatus(d);
+        }, 2000);
+      }
     } catch { setHdhrStatus(null); }
   };
 
@@ -170,8 +183,8 @@ function TVPage() {
           </div>
           <div className="flex items-center gap-3">
             {error && <span className="text-xs text-danger">{error}</span>}
-            <span className={`badge ${hdhrStatus?.connected ? 'badge-live' : 'bg-danger/10 text-danger border border-danger/20'}`}>
-              {hdhrStatus?.connected ? 'HDHomeRun Connected' : 'No Device'}
+            <span className={`badge ${hdhrStatus?.connected ? 'badge-live' : hdhrStatus === null ? 'badge-brand' : 'bg-danger/10 text-danger border border-danger/20'}`}>
+              {hdhrStatus?.connected ? 'HDHomeRun Connected' : hdhrStatus === null ? 'Connecting...' : 'No Device'}
             </span>
           </div>
         </div>
