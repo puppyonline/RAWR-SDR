@@ -85,7 +85,7 @@ app.post('/api/tune', async (req, res) => {
   const isWin = process.platform === 'win32';
 
   try {
-    if (mode === 'fm' || mode === 'hd') {
+    if (mode === 'fm') {
       // === FM: use rtl_fm at 171k (works, proven in earlier testing) ===
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
@@ -157,6 +157,79 @@ app.post('/api/tune', async (req, res) => {
           const srcPos = i * ratio;
           const srcIdx = Math.min(Math.floor(srcPos), srcSamples - 1);
           output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
+        }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+      });
+
+    } else if (mode === 'hd') {
+      // === HD Radio: use nrsc5 for NRSC-5 digital decoding ===
+      // nrsc5 directly controls the RTL-SDR, decodes digital audio,
+      // and outputs raw 16-bit stereo PCM at 44100 Hz via -o - -t raw
+      // Metadata (Title, Artist, Station) comes on stderr as log lines
+      const nrsc5Cmd = isWin ? 'nrsc5.exe' : 'nrsc5';
+      const hdProgram = String(req.body.hdChannel || 0); // 0=HD1, 1=HD2, etc.
+      const args = ['-o', '-', '-t', 'raw', '-l', '2', `${frequency}`, hdProgram];
+
+      console.log(`[RAWR-SDR] HD: ${nrsc5Cmd} ${args.join(' ')}`);
+      activeProcess = spawn(nrsc5Cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      // Parse metadata from stderr
+      let stderrBuffer = '';
+      activeProcess.stderr?.on('data', (d: Buffer) => {
+        stderrBuffer += d.toString();
+        const lines = stderrBuffer.split('\n');
+        stderrBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[\s|]*/, '').trim();
+          if (trimmed.startsWith('Title:')) currentRDS.title = trimmed.slice(7).trim();
+          else if (trimmed.startsWith('Artist:')) currentRDS.artist = trimmed.slice(8).trim();
+          else if (trimmed.startsWith('Album:')) currentRDS.album = trimmed.slice(7).trim();
+          else if (trimmed.startsWith('Genre:')) currentRDS.genre = trimmed.slice(7).trim();
+          else if (trimmed.startsWith('Station name:')) currentRDS.ps = trimmed.slice(14).trim();
+          else if (trimmed.startsWith('Slogan:')) currentRDS.slogan = trimmed.slice(8).trim();
+          else if (trimmed.startsWith('Audio bit rate:')) currentRDS.bitrate = trimmed.slice(16).trim();
+          else if (trimmed.startsWith('Synchronized')) currentRDS.synced = true;
+          else if (trimmed.startsWith('Lost sync')) currentRDS.synced = false;
+
+          if (trimmed.startsWith('Title:') || trimmed.startsWith('Artist:') ||
+              trimmed.startsWith('Station name:')) {
+            const rdsMsg = JSON.stringify({ type: 'rds', data: currentRDS });
+            wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(rdsMsg); });
+          }
+          if (trimmed) console.log(`[nrsc5] ${trimmed}`);
+        }
+      });
+
+      // nrsc5 -o - -t raw outputs 16-bit signed stereo PCM at 44100 Hz
+      // Convert to mono and resample to 48000 Hz to match other modes
+      let residualSamples = Buffer.alloc(0);
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        // Combine with any leftover from last chunk
+        const combined = Buffer.concat([residualSamples, chunk]);
+        const usable = combined.length & ~3; // stereo 16-bit = 4 bytes per frame
+        residualSamples = combined.subarray(usable);
+        if (usable < 4) return;
+
+        const frames = usable / 4;
+        // Mix stereo to mono
+        const mono44 = new Float32Array(frames);
+        for (let i = 0; i < frames; i++) {
+          const left = combined.readInt16LE(i * 4) / 32768;
+          const right = combined.readInt16LE(i * 4 + 2) / 32768;
+          mono44[i] = (left + right) * 0.5;
+        }
+
+        // Resample 44100 -> 48000 (ratio ~1.088)
+        const ratio = 44100 / 48000;
+        const outLen = Math.floor(frames / ratio);
+        const output = Buffer.alloc(outLen * 2);
+        for (let i = 0; i < outLen; i++) {
+          const srcPos = i * ratio;
+          const srcIdx = Math.min(Math.floor(srcPos), frames - 1);
+          const sample = mono44[srcIdx];
+          output.writeInt16LE(Math.round(Math.max(-1, Math.min(1, sample)) * 32000), i * 2);
         }
 
         wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });

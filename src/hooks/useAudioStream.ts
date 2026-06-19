@@ -163,14 +163,14 @@ export function useAudioStream() {
   /**
    * Tune to a frequency. Starts streaming if not already, or retunes live.
    */
-  const tune = useCallback(async (frequency: number, mode: string) => {
+  const tune = useCallback(async (frequency: number, mode: string, extra?: Record<string, any>) => {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
       const res = await fetch('/api/tune', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frequency, mode }),
+        body: JSON.stringify({ frequency, mode, ...extra }),
       });
 
       if (!res.ok) {

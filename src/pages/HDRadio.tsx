@@ -21,7 +21,7 @@ function HDRadio() {
   useEffect(() => {
     if (power && !initialTune.current) {
       initialTune.current = true;
-      audio.tune(frequency, 'hd');
+      audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
       setMetadata({ station: `WXYZ-HD${hdChannel}`, artist: 'Decoding...', title: 'HD Stream', genre: 'HD Radio' });
     }
     if (!power) initialTune.current = false;
@@ -31,7 +31,7 @@ function HDRadio() {
     if (!power) return;
     if (tuneTimer.current) clearTimeout(tuneTimer.current);
     tuneTimer.current = setTimeout(() => {
-      audio.tune(frequency, 'hd');
+      audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
       setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Acquiring...', title: 'Decoding...', genre: 'HD Radio' });
     }, 500);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
