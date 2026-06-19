@@ -25,6 +25,7 @@ export function useAudioStream() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const filterRef = useRef<BiquadFilterNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const nextTimeRef = useRef(0);
   const bufferQueueRef = useRef<Float32Array[]>([]);
   const processingRef = useRef(false);
@@ -73,8 +74,16 @@ export function useAudioStream() {
     // Create gain node if needed — start at 50% to avoid hot output
     if (!gainNodeRef.current || gainNodeRef.current.context !== ctx) {
       gainNodeRef.current = ctx.createGain();
-      gainNodeRef.current.gain.value = 0.5; // default 70% volume
-      gainNodeRef.current.connect(ctx.destination);
+      gainNodeRef.current.gain.value = 0.5;
+
+      // AnalyserNode for real spectrum/signal data
+      analyserRef.current = ctx.createAnalyser();
+      analyserRef.current.fftSize = 256; // 128 frequency bins
+      analyserRef.current.smoothingTimeConstant = 0.7;
+
+      // Chain: gain -> analyser -> destination
+      gainNodeRef.current.connect(analyserRef.current);
+      analyserRef.current.connect(ctx.destination);
     }
 
     // Pilot tone filter + slight smoothing
@@ -197,6 +206,7 @@ export function useAudioStream() {
       audioCtxRef.current = null;
       gainNodeRef.current = null;
       filterRef.current = null;
+      analyserRef.current = null;
     }
 
     bufferQueueRef.current = [];
@@ -215,6 +225,29 @@ export function useAudioStream() {
     rdsCallbackRef.current = callback;
   }, []);
 
+  /** Get current FFT frequency data (0-255 values, 128 bins) */
+  const getFrequencyData = useCallback((): Uint8Array => {
+    if (analyserRef.current) {
+      const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(data);
+      return data;
+    }
+    return new Uint8Array(128);
+  }, []);
+
+  /** Get signal strength as 0-100 based on RMS of frequency data */
+  const getSignalLevel = useCallback((): number => {
+    if (analyserRef.current) {
+      const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i];
+      const avg = sum / data.length;
+      return Math.min(100, Math.round((avg / 255) * 150)); // scale up a bit
+    }
+    return 0;
+  }, []);
+
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
@@ -222,5 +255,5 @@ export function useAudioStream() {
     };
   }, []);
 
-  return { ...state, tune, stop, setVolume, onRDS };
+  return { ...state, tune, stop, setVolume, onRDS, getFrequencyData, getSignalLevel };
 }

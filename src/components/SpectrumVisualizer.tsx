@@ -1,16 +1,16 @@
 import { useEffect, useRef } from 'react';
 
 interface SpectrumVisualizerProps {
+  /** Function that returns current FFT data (Uint8Array of 128 bins, 0-255) */
+  getFrequencyData?: () => Uint8Array;
   isActive: boolean;
   color?: string;
   height?: number;
 }
 
-function SpectrumVisualizer({ isActive, color = '#6366f1', height = 120 }: SpectrumVisualizerProps) {
+function SpectrumVisualizer({ getFrequencyData, isActive, color = '#6366f1', height = 100 }: SpectrumVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
-  const dataRef = useRef<number[]>(new Array(128).fill(0));
-  const targetRef = useRef<number[]>(new Array(128).fill(0));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,52 +33,39 @@ function SpectrumVisualizer({ isActive, color = '#6366f1', height = 120 }: Spect
       const h = rect.height;
       ctx.clearRect(0, 0, w, h);
 
-      // Generate targets
-      if (isActive) {
-        for (let i = 0; i < targetRef.current.length; i++) {
-          // Create a natural-looking spectrum with peaks
-          const base = Math.sin(i * 0.05) * 0.15 + 0.2;
-          const noise = (Math.random() - 0.5) * 0.3;
-          targetRef.current[i] = Math.max(0.02, Math.min(0.95, base + noise + 0.3));
-        }
+      let data: Uint8Array;
+      if (isActive && getFrequencyData) {
+        data = getFrequencyData();
       } else {
-        targetRef.current = targetRef.current.map(() => 0.01);
+        data = new Uint8Array(128); // silence
       }
 
-      // Smooth towards targets
-      dataRef.current = dataRef.current.map((val, i) => {
-        const target = targetRef.current[i];
-        return val + (target - val) * (isActive ? 0.12 : 0.05);
-      });
-
-      const barCount = dataRef.current.length;
+      const barCount = data.length;
       const barWidth = w / barCount;
-      const gap = 1;
 
       // Draw bars
+      const gradient = ctx.createLinearGradient(0, h, 0, 0);
+      gradient.addColorStop(0, `${color}10`);
+      gradient.addColorStop(0.3, `${color}40`);
+      gradient.addColorStop(0.7, `${color}90`);
+      gradient.addColorStop(1, `${color}dd`);
+
       for (let i = 0; i < barCount; i++) {
-        const barH = dataRef.current[i] * h * 0.85;
+        const normalized = data[i] / 255;
+        const barH = normalized * h * 0.9;
         const x = i * barWidth;
-        const y = h - barH;
-
-        // Gradient per bar
-        const gradient = ctx.createLinearGradient(x, h, x, y);
-        gradient.addColorStop(0, `${color}15`);
-        gradient.addColorStop(0.4, `${color}60`);
-        gradient.addColorStop(1, `${color}cc`);
-
         ctx.fillStyle = gradient;
-        ctx.fillRect(x + gap / 2, y, barWidth - gap, barH);
+        ctx.fillRect(x + 0.5, h - barH, barWidth - 1, barH);
       }
 
-      // Draw top line
+      // Peak line
       ctx.beginPath();
-      ctx.strokeStyle = `${color}80`;
+      ctx.strokeStyle = `${color}60`;
       ctx.lineWidth = 1;
       for (let i = 0; i < barCount; i++) {
-        const barH = dataRef.current[i] * h * 0.85;
+        const normalized = data[i] / 255;
+        const y = h - normalized * h * 0.9;
         const x = i * barWidth + barWidth / 2;
-        const y = h - barH;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
@@ -92,7 +79,7 @@ function SpectrumVisualizer({ isActive, color = '#6366f1', height = 120 }: Spect
       cancelAnimationFrame(animationRef.current);
       window.removeEventListener('resize', resize);
     };
-  }, [isActive, color]);
+  }, [isActive, color, getFrequencyData]);
 
   return (
     <canvas

@@ -8,7 +8,6 @@ function HDRadio() {
   const [frequency, setFrequency] = useState(94.7);
   const [hdChannel, setHdChannel] = useState(1);
   const [volume, setVolume] = useState(80);
-  const [signalStrength, setSignalStrength] = useState(0);
   const [power, setPower] = useState(false);
   const [metadata, setMetadata] = useState({
     station: '---', artist: '---', title: '---', genre: '---',
@@ -23,7 +22,6 @@ function HDRadio() {
     if (power && !initialTune.current) {
       initialTune.current = true;
       audio.tune(frequency, 'hd');
-      setSignalStrength(Math.floor(Math.random() * 30) + 50);
       setMetadata({ station: `WXYZ-HD${hdChannel}`, artist: 'Decoding...', title: 'HD Stream', genre: 'HD Radio' });
     }
     if (!power) initialTune.current = false;
@@ -34,7 +32,6 @@ function HDRadio() {
     if (tuneTimer.current) clearTimeout(tuneTimer.current);
     tuneTimer.current = setTimeout(() => {
       audio.tune(frequency, 'hd');
-      setSignalStrength(Math.floor(Math.random() * 30) + 45);
       setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Acquiring...', title: 'Decoding...', genre: 'HD Radio' });
     }, 500);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
@@ -44,7 +41,6 @@ function HDRadio() {
     if (power) {
       setPower(false);
       await audio.stop();
-      setSignalStrength(0);
       setMetadata({ station: '---', artist: '---', title: '---', genre: '---' });
     } else {
       setPower(true);
@@ -130,11 +126,11 @@ function HDRadio() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
           <span className="label">Spectrum</span>
-          <div className="mt-3"><SpectrumVisualizer isActive={power && audio.isPlaying} color="#a855f7" height={100} /></div>
+          <div className="mt-3"><SpectrumVisualizer getFrequencyData={audio.getFrequencyData} isActive={power && audio.isPlaying} color="#a855f7" height={100} /></div>
         </div>
         <div className="card p-5">
           <span className="label">Signal</span>
-          <div className="mt-3"><SignalMeter value={signalStrength} color="#a855f7" /></div>
+          <div className="mt-3"><SignalMeter getSignalLevel={audio.getSignalLevel} isActive={power && audio.isPlaying} color="#a855f7" /></div>
         </div>
       </div>
     </div>

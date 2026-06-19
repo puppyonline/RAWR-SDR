@@ -46,7 +46,6 @@ function ATCRadio() {
   const [frequency, setFrequency] = useState(119.2);
   const [squelch, setSquelch] = useState(50);
   const [volume, setVolume] = useState(80);
-  const [signalStrength, setSignalStrength] = useState(0);
   const [power, setPower] = useState(false);
   const audio = useAudioStream();
   const tuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,7 +57,6 @@ function ATCRadio() {
     if (power && !initialTune.current) {
       initialTune.current = true;
       audio.tune(frequency, 'atc');
-      setSignalStrength(Math.floor(Math.random() * 40) + 30);
     }
     if (!power) initialTune.current = false;
   }, [power]);
@@ -68,7 +66,6 @@ function ATCRadio() {
     if (tuneTimer.current) clearTimeout(tuneTimer.current);
     tuneTimer.current = setTimeout(() => {
       audio.tune(frequency, 'atc');
-      setSignalStrength(Math.floor(Math.random() * 40) + 30);
     }, 500);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency]);
@@ -77,7 +74,6 @@ function ATCRadio() {
     if (power) {
       setPower(false);
       await audio.stop();
-      setSignalStrength(0);
     } else {
       setPower(true);
     }
@@ -151,11 +147,11 @@ function ATCRadio() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
           <span className="label">Spectrum</span>
-          <div className="mt-3"><SpectrumVisualizer isActive={power && audio.isPlaying} color="#22d3ee" height={100} /></div>
+          <div className="mt-3"><SpectrumVisualizer getFrequencyData={audio.getFrequencyData} isActive={power && audio.isPlaying} color="#22d3ee" height={100} /></div>
         </div>
         <div className="card p-5">
           <span className="label">Signal</span>
-          <div className="mt-3"><SignalMeter value={signalStrength} color="#22d3ee" /></div>
+          <div className="mt-3"><SignalMeter getSignalLevel={audio.getSignalLevel} isActive={power && audio.isPlaying} color="#22d3ee" /></div>
         </div>
       </div>
 

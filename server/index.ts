@@ -3,7 +3,6 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, ChildProcess, execSync } from 'child_process';
-import { demodAM, resetState } from './dsp';
 
 const app = express();
 const PORT = 3001;
@@ -81,7 +80,6 @@ app.post('/api/tune', async (req, res) => {
     await new Promise((r) => setTimeout(r, 800));
   }
   currentRDS = {};
-  resetState();
   currentMode = mode;
 
   const isWin = process.platform === 'win32';
@@ -203,28 +201,43 @@ app.post('/api/tune', async (req, res) => {
       });
 
     } else {
-      // === AM broadcast: rtl_sdr + our DSP (needs direct sampling) ===
-      const rtlSdr = isWin ? 'rtl_sdr.exe' : 'rtl_sdr';
-      const freqHz = Math.round(frequency * 1000);
+      // === AM broadcast: rtl_fm with direct sampling ===
+      // rtl_fm handles direct sampling mode correctly (-E direct)
+      // and tunes to the right frequency. We just downsample 171k->48k in Node.
+      const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
+      const args = [
+        '-M', 'am',
+        '-f', `${frequency}k`,
+        '-s', '171k',
+        '-l', '0',
+        '-g', '30',
+        '-E', 'direct',
+      ];
 
-      // rtl_sdr syntax: rtl_sdr [options] filename
-      // '-' means stdout. Must be LAST argument.
-      // This build uses -O 'ds=1' for direct sampling (not -D)
-      const args = ['-O', 'ds=1', '-s', '240000', '-f', String(freqHz), '-g', '30', '-S', '-'];
-
-      console.log(`[RAWR-SDR] AM: ${rtlSdr} ${args.join(' ')}`);
-      activeProcess = spawn(rtlSdr, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+      console.log(`[RAWR-SDR] AM: ${rtlFm} ${args.join(' ')}`);
+      activeProcess = spawn(rtlFm, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
       activeProcess.stderr?.on('data', (d: Buffer) => {
         const m = d.toString().trim();
-        if (m) console.log(`[rtl_sdr] ${m}`);
+        if (m) console.log(`[rtl_fm] ${m}`);
       });
 
+      // Downsample 171kHz -> 48kHz (same as FM/ATC)
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
-        const pcm = demodAM(chunk);
-        if (pcm.length > 0) {
-          wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(pcm); });
+        const usable = chunk.length & ~1;
+        if (usable < 4) return;
+        const srcSamples = usable / 2;
+        const ratio = 171000 / 48000;
+        const dstSamples = Math.floor(srcSamples / ratio);
+        if (dstSamples < 1) return;
+
+        const output = Buffer.alloc(dstSamples * 2);
+        for (let i = 0; i < dstSamples; i++) {
+          const srcIdx = Math.min(Math.floor(i * ratio), srcSamples - 1);
+          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
         }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
       });
     }
 
