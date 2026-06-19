@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
 import { useTVShowInfo } from '../hooks/useMetadata';
-import { useTVPlayer } from '../hooks/useTVPlayer';
-import type { TVChannel } from '../hooks/useTVPlayer';
 
 interface Channel {
   GuideNumber: string;
@@ -39,37 +37,67 @@ const channelMeta: Record<string, { network: string; color: string; logo?: strin
   '61': { network: 'IND', color: '#6366f1' },
 };
 
+const loadingBlurbs = [
+  'Waking up the hamsters that power the antenna...',
+  'Convincing electrons to flow in the right direction...',
+  'Translating ancient MPEG-2 hieroglyphics...',
+  'Politely asking ffmpeg to hurry up...',
+  'Negotiating with the airwaves...',
+  'Converting photons to pixels...',
+  'Untangling the electromagnetic spectrum...',
+  'Spinning up the transcode hamster wheel...',
+  'Herding radio waves into your browser...',
+  'Asking the HDHomeRun nicely for some video...',
+  'Buffering at the speed of light (minus a few seconds)...',
+  'Converting over-the-air freedom into browser content...',
+  'Crunching pixels fresh from the antenna...',
+];
+
 function TVPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [guide, setGuide] = useState<GuideChannel[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [loadingBlurb, setLoadingBlurb] = useState('');
   const [hdhrStatus, setHdhrStatus] = useState<any>(null);
-  const [localError, setLocalError] = useState('');
+  const [error, setError] = useState('');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<any>(null);
+  const autoTuneRef = useRef(false);
 
-  const { state, tuneChannel, stopPlayback } = useTVPlayer();
-  const { selectedChannel, isPlaying, isBuffering, error, loadingBlurb } = state;
+  // Cycle blurbs while buffering
+  useEffect(() => {
+    if (!isBuffering) return;
+    setLoadingBlurb(loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)]);
+    const interval = setInterval(() => {
+      setLoadingBlurb(loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isBuffering]);
 
+  // Fetch data on mount
   useEffect(() => {
     const init = async () => {
       await new Promise((r) => setTimeout(r, 300));
       await fetchStatus();
-      await fetchLineup();
+      const lineup = await fetchLineup();
       fetchGuide();
-    };
-    init();
-  }, []);
 
-  // On mount, make the provider's video container visible and positioned
-  // inside our player area. On unmount, hide it again.
-  useEffect(() => {
-    const container = document.getElementById('tv-player-container');
-    if (container) {
-      container.setAttribute('data-tv-page', 'true');
-    }
-    return () => {
-      if (container) {
-        container.removeAttribute('data-tv-page');
+      // Auto-tune if ?ch= param is present
+      const chParam = searchParams.get('ch');
+      if (chParam && lineup.length > 0 && !autoTuneRef.current) {
+        autoTuneRef.current = true;
+        const match = lineup.find((c: Channel) => c.GuideNumber === chParam);
+        if (match) {
+          tuneChannel(match);
+          // Clear the param from URL
+          setSearchParams({}, { replace: true });
+        }
       }
     };
+    init();
   }, []);
 
   const fetchStatus = async () => {
@@ -86,13 +114,18 @@ function TVPage() {
     } catch { setHdhrStatus(null); }
   };
 
-  const fetchLineup = async () => {
+  const fetchLineup = async (): Promise<Channel[]> => {
     try {
       const res = await fetch('/api/hdhr/lineup');
       if (!res.ok) throw new Error('Failed to get lineup');
       const data = await res.json();
-      setChannels(data.filter((ch: any) => parseFloat(ch.GuideNumber) < 100 && !ch.DRM));
-    } catch (err: any) { setLocalError(err.message); }
+      const filtered = data.filter((ch: any) => parseFloat(ch.GuideNumber) < 100 && !ch.DRM);
+      setChannels(filtered);
+      return filtered;
+    } catch (err: any) {
+      setError(err.message);
+      return [];
+    }
   };
 
   const fetchGuide = async () => {
@@ -102,17 +135,72 @@ function TVPage() {
     } catch {}
   };
 
+  const tuneChannel = async (channel: Channel) => {
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+    setIsPlaying(false);
+    setIsBuffering(true);
+    setError('');
+    setSelectedChannel(channel);
+
+    const mpegts = await import('mpegts.js');
+    if (!mpegts.default.isSupported()) {
+      setError('MPEG-TS playback not supported in this browser');
+      setIsBuffering(false);
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video) { setIsBuffering(false); return; }
+
+    video.onplaying = () => { setIsBuffering(false); setIsPlaying(true); };
+    video.onwaiting = () => { setIsBuffering(true); };
+
+    const player = mpegts.default.createPlayer({
+      type: 'mpegts',
+      isLive: true,
+      url: `${window.location.origin}/api/hdhr/stream/${channel.GuideNumber}`,
+    }, {
+      enableWorker: true,
+      liveBufferLatencyChasing: true,
+      liveBufferLatencyMaxLatency: 3,
+      liveBufferLatencyMinRemain: 0.5,
+    });
+
+    player.attachMediaElement(video);
+    player.load();
+    player.play();
+    playerRef.current = player;
+
+    player.on('error', () => {
+      setError('Channel unavailable — may be an ATSC 3.0/DRM channel');
+      setIsPlaying(false);
+      setIsBuffering(false);
+    });
+  };
+
+  const stopPlayback = () => {
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+    setIsPlaying(false);
+    setIsBuffering(false);
+    setSelectedChannel(null);
+  };
+
   const getCurrentProgram = (guideNumber: string): GuideEntry | null => {
     const now = Math.floor(Date.now() / 1000);
     const ch = guide.find((g) => g.GuideNumber === guideNumber);
     return ch?.Guide?.find((p) => p.StartTime <= now && p.EndTime > now) || null;
   };
 
-  const handleTune = (ch: Channel) => {
-    tuneChannel({ GuideNumber: ch.GuideNumber, GuideName: ch.GuideName });
-  };
-
-  const displayError = error || localError;
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { if (playerRef.current) playerRef.current.destroy(); };
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -124,7 +212,7 @@ function TVPage() {
             <p className="text-xs text-zinc-500 font-mono mt-0.5">HDHomeRun Flex 4K &middot; OTA Broadcast</p>
           </div>
           <div className="flex items-center gap-3">
-            {displayError && <span className="text-xs text-danger">{displayError}</span>}
+            {error && <span className="text-xs text-danger">{error}</span>}
             <Link to="/guide" className="btn-ghost btn-sm">TV Guide</Link>
             <span className={`badge ${hdhrStatus?.connected ? 'badge-live' : hdhrStatus === null ? 'badge-brand' : 'bg-danger/10 text-danger border border-danger/20'}`}>
               {hdhrStatus?.connected ? 'Connected' : hdhrStatus === null ? 'Connecting...' : 'No Device'}
@@ -136,7 +224,8 @@ function TVPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Video Player */}
         <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col">
-          <PlayerArea
+          <PlayerOverlay
+            videoRef={videoRef}
             isPlaying={isPlaying}
             isBuffering={isBuffering}
             selectedChannel={selectedChannel}
@@ -159,7 +248,7 @@ function TVPage() {
                 const meta = channelMeta[ch.GuideNumber.split('.')[0]];
                 const isActive = selectedChannel?.GuideNumber === ch.GuideNumber;
                 return (
-                  <button key={ch.GuideNumber} onClick={() => handleTune(ch)}
+                  <button key={ch.GuideNumber} onClick={() => tuneChannel(ch)}
                     className={`w-full text-left px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${isActive ? 'bg-brand/5 border-l-2 border-brand' : ''}`}>
                     <div className="flex items-center gap-3">
                       {(() => {
@@ -195,85 +284,23 @@ function TVPage() {
   );
 }
 
-// ─── Player Area (contains the video + overlay) ──────────────────────────────
-// The actual <video> element lives in the provider. This component just shows
-// it via an iframe-like "window" by making the provider container visible here.
+// ─── Player Overlay ──────────────────────────────────────────────────────────
 
-function PlayerArea({ isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
+function PlayerOverlay({ videoRef, isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
+  videoRef: React.RefObject<HTMLVideoElement>;
   isPlaying: boolean;
   isBuffering: boolean;
-  selectedChannel: TVChannel | null;
+  selectedChannel: Channel | null;
   guide: GuideChannel[];
   channelMeta: Record<string, { network: string; color: string; logo?: string }>;
   loadingBlurb: string;
   onStop: () => void;
 }) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setTick] = useState(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Position the provider's video container to fill this area
-  useEffect(() => {
-    const positionVideo = () => {
-      const wrapper = wrapperRef.current;
-      const container = document.getElementById('tv-player-container');
-      if (!wrapper || !container) return;
-
-      const rect = wrapper.getBoundingClientRect();
-      Object.assign(container.style, {
-        position: 'fixed',
-        top: `${rect.top}px`,
-        left: `${rect.left}px`,
-        width: `${rect.width}px`,
-        height: `${rect.height}px`,
-        opacity: '1',
-        pointerEvents: 'none',
-        zIndex: '1',
-        overflow: 'hidden',
-        borderRadius: '0',
-      });
-      // Remove the classes that hide it
-      container.className = '';
-    };
-
-    positionVideo();
-    window.addEventListener('resize', positionVideo);
-    window.addEventListener('scroll', positionVideo);
-
-    // Reposition periodically in case of layout shifts
-    const interval = setInterval(positionVideo, 500);
-
-    return () => {
-      window.removeEventListener('resize', positionVideo);
-      window.removeEventListener('scroll', positionVideo);
-      clearInterval(interval);
-      // Reset container to hidden
-      const container = document.getElementById('tv-player-container');
-      if (container) {
-        container.style.cssText = '';
-        container.className = 'fixed top-0 left-0 w-px h-px overflow-hidden opacity-0 pointer-events-none -z-50';
-      }
-    };
-  }, []);
-
-  // Handle fullscreen — when fullscreen, make the container fill the screen
-  useEffect(() => {
-    const container = document.getElementById('tv-player-container');
-    if (!container) return;
-
-    if (isFullscreen) {
-      Object.assign(container.style, {
-        top: '0',
-        left: '0',
-        width: '100vw',
-        height: '100vh',
-        zIndex: '9999',
-        borderRadius: '0',
-      });
-    }
-  }, [isFullscreen]);
 
   const now = Math.floor(Date.now() / 1000);
   const guideChannel = selectedChannel ? guide.find((g) => g.GuideNumber === selectedChannel.GuideNumber) : null;
@@ -286,10 +313,7 @@ function PlayerArea({ isPlaying, isBuffering, selectedChannel, guide, channelMet
   const timeRemaining = current ? Math.max(0, Math.ceil((current.EndTime - now) / 60)) : 0;
   const formatTime = (epoch: number) => new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-  useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => { const i = setInterval(() => setTick((t) => t + 1), 30000); return () => clearInterval(i); }, []);
 
   const revealOverlay = useCallback(() => {
     if (!isPlaying) return;
@@ -305,29 +329,30 @@ function PlayerArea({ isPlaying, isBuffering, selectedChannel, guide, channelMet
   }, []);
 
   const toggleFullscreen = () => {
-    const container = document.getElementById('tv-player-container');
-    if (!container) return;
+    if (!containerRef.current) return;
     if (document.fullscreenElement) document.exitFullscreen();
-    else container.requestFullscreen();
+    else containerRef.current.requestFullscreen();
   };
 
   const togglePlayPause = () => {
-    const video = document.getElementById('airwave-tv-video') as HTMLVideoElement | null;
+    const video = videoRef.current;
     if (!video) return;
     if (video.paused) video.play(); else video.pause();
   };
 
   return (
     <div
-      ref={wrapperRef}
-      className="relative aspect-video bg-black"
+      ref={containerRef}
+      className={`relative bg-black ${isFullscreen ? 'w-screen h-screen' : 'aspect-video'}`}
       onMouseMove={revealOverlay}
       onMouseEnter={revealOverlay}
       onClick={revealOverlay}
     >
-      {/* Idle state */}
+      <video ref={videoRef} className="w-full h-full" autoPlay playsInline muted={false} />
+
+      {/* Idle */}
       {!isPlaying && !isBuffering && !selectedChannel && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
           <div className="text-center">
             <div className="text-4xl mb-2 opacity-30">📺</div>
             <p className="text-sm text-zinc-500">Select a channel to start watching</p>
@@ -337,7 +362,7 @@ function PlayerArea({ isPlaying, isBuffering, selectedChannel, guide, channelMet
 
       {/* Buffering */}
       {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
           <div className="text-center space-y-4">
             <div className="flex items-end justify-center gap-1 h-10">
               {[0, 150, 300, 450, 600, 750, 900].map((delay, i) => (
@@ -356,7 +381,7 @@ function PlayerArea({ isPlaying, isBuffering, selectedChannel, guide, channelMet
 
       {/* Overlay */}
       {isPlaying && selectedChannel && (
-        <div className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 z-20 pointer-events-none ${showOverlay ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none ${showOverlay ? 'opacity-100' : 'opacity-0'}`}>
           <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-5 pointer-events-auto">
             <div className="flex items-center gap-2.5">
               <span className="text-base font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
