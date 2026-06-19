@@ -15,6 +15,7 @@ export function useAudioStream() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
   const nextTimeRef = useRef(0);
   const bufferQueueRef = useRef<Float32Array[]>([]);
   const processingRef = useRef(false);
@@ -24,7 +25,8 @@ export function useAudioStream() {
     processingRef.current = true;
 
     const ctx = audioCtxRef.current;
-    if (!ctx) {
+    const gainNode = gainNodeRef.current;
+    if (!ctx || !gainNode) {
       processingRef.current = false;
       return;
     }
@@ -36,10 +38,11 @@ export function useAudioStream() {
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      // Route through gain node for volume control
+      source.connect(gainNode);
 
       const currentTime = ctx.currentTime;
-      const startTime = Math.max(nextTimeRef.current, currentTime + 0.01);
+      const startTime = Math.max(nextTimeRef.current, currentTime + 0.02);
       source.start(startTime);
       nextTimeRef.current = startTime + buffer.duration;
     }
@@ -63,13 +66,20 @@ export function useAudioStream() {
         throw new Error(err.error || 'Failed to start SDR');
       }
 
-      // Set up AudioContext
+      // Set up AudioContext with gain node
       if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
         audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
       }
       if (audioCtxRef.current.state === 'suspended') {
         await audioCtxRef.current.resume();
       }
+
+      // Create gain node for volume control
+      if (!gainNodeRef.current || gainNodeRef.current.context !== audioCtxRef.current) {
+        gainNodeRef.current = audioCtxRef.current.createGain();
+        gainNodeRef.current.connect(audioCtxRef.current.destination);
+      }
+
       nextTimeRef.current = 0;
       bufferQueueRef.current = [];
 
@@ -86,7 +96,7 @@ export function useAudioStream() {
       ws.onmessage = (event) => {
         if (!(event.data instanceof ArrayBuffer)) return;
 
-        // Server sends signed 16-bit PCM at 48kHz
+        // rtl_fm outputs signed 16-bit little-endian PCM at 48kHz
         const int16 = new Int16Array(event.data);
         const float32 = new Float32Array(int16.length);
         for (let i = 0; i < int16.length; i++) {
@@ -95,7 +105,7 @@ export function useAudioStream() {
 
         bufferQueueRef.current.push(float32);
 
-        // Keep buffer queue from growing unbounded (max ~2 seconds)
+        // Limit queue to ~2 seconds of audio to prevent unbounded growth
         while (bufferQueueRef.current.length > 100) {
           bufferQueueRef.current.shift();
         }
@@ -104,7 +114,7 @@ export function useAudioStream() {
       };
 
       ws.onerror = () => {
-        setState((prev) => ({ ...prev, error: 'WebSocket error' }));
+        setState((prev) => ({ ...prev, error: 'WebSocket connection error' }));
       };
 
       ws.onclose = () => {
@@ -118,26 +128,37 @@ export function useAudioStream() {
   }, [processQueue]);
 
   const stop = useCallback(async () => {
-    // Close WebSocket
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
 
-    // Stop the SDR on the server
     try {
       await fetch('/api/stop', { method: 'POST' });
     } catch { /* ignore */ }
 
-    // Close audio context
     if (audioCtxRef.current) {
       await audioCtxRef.current.close();
       audioCtxRef.current = null;
+      gainNodeRef.current = null;
     }
 
     bufferQueueRef.current = [];
     setState({ isPlaying: false, isConnecting: false, error: null });
   }, []);
 
-  return { ...state, start, stop };
+  /**
+   * Set volume level. 0 = mute, 1 = full volume.
+   * Accepts 0-100 range and normalizes internally.
+   */
+  const setVolume = useCallback((volumePercent: number) => {
+    if (gainNodeRef.current) {
+      // Convert 0-100 to 0-1, apply slight exponential curve for natural feel
+      const normalized = Math.max(0, Math.min(100, volumePercent)) / 100;
+      const gain = normalized * normalized; // quadratic curve
+      gainNodeRef.current.gain.setTargetAtTime(gain, gainNodeRef.current.context.currentTime, 0.015);
+    }
+  }, []);
+
+  return { ...state, start, stop, setVolume };
 }

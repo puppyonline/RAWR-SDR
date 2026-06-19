@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -21,10 +21,16 @@ function FMRadio() {
   const [signalStrength, setSignalStrength] = useState(0);
   const audio = useAudioStream();
 
+  useEffect(() => {
+    audio.setVolume(volume);
+  }, [volume, audio.setVolume]);
+
   const handleTune = useCallback((freq: number) => {
-    setFrequency(freq);
-    setSignalStrength(Math.floor(Math.random() * 40) + 45);
-  }, []);
+    setFrequency(Number(freq.toFixed(1)));
+    if (audio.isPlaying) {
+      setSignalStrength(Math.floor(Math.random() * 30) + 55);
+    }
+  }, [audio.isPlaying]);
 
   const togglePlay = async () => {
     if (audio.isPlaying) {
@@ -32,35 +38,33 @@ function FMRadio() {
       setSignalStrength(0);
     } else {
       await audio.start(frequency, 'fm');
+      audio.setVolume(volume);
       setSignalStrength(Math.floor(Math.random() * 30) + 60);
     }
   };
 
   return (
     <div className="space-y-4 max-w-6xl">
-      {/* Controls header */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">FM Broadcast</h2>
-            <p className="text-xs text-white/30 font-mono mt-0.5">87.5 &ndash; 108.0 MHz &middot; Wideband FM</p>
+            <p className="text-xs text-white/30 font-mono mt-0.5">
+              87.5 &ndash; 108.0 MHz &middot; Wideband FM
+            </p>
           </div>
-
           <div className="flex items-center gap-3">
-            {audio.error && (
-              <span className="text-xs text-danger">{audio.error}</span>
-            )}
+            {audio.error && <span className="text-xs text-danger">{audio.error}</span>}
             <button
               onClick={togglePlay}
               disabled={audio.isConnecting}
               className={audio.isPlaying ? 'btn-danger' : 'btn-primary'}
             >
-              {audio.isConnecting ? 'Connecting...' : audio.isPlaying ? 'Stop' : 'Play'}
+              {audio.isConnecting ? 'Tuning...' : audio.isPlaying ? 'Stop' : 'Play'}
             </button>
           </div>
         </div>
 
-        {/* Frequency display */}
         <div className="flex items-baseline gap-3 mb-6">
           <span className="freq-display">{frequency.toFixed(1)}</span>
           <span className="text-sm text-white/30">MHz</span>
@@ -72,69 +76,47 @@ function FMRadio() {
           )}
         </div>
 
-        {/* Tuning slider */}
-        <FrequencyDial
-          value={frequency}
-          onChange={handleTune}
-          min={87.5}
-          max={108.0}
-          step={0.1}
-        />
+        <FrequencyDial value={frequency} onChange={handleTune} min={87.5} max={108.0} step={0.1} />
 
-        {/* Direct entry */}
-        <div className="flex items-center gap-3 mt-4">
-          <input
-            type="number"
-            min={87.5}
-            max={108.0}
-            step={0.1}
-            value={frequency}
-            onChange={(e) => handleTune(Number(e.target.value))}
-            className="input w-32 font-mono text-center"
-          />
-          <span className="text-xs text-white/30">Direct frequency entry</span>
+        <div className="flex items-center gap-6 mt-5">
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min={87.5} max={108.0} step={0.1} value={frequency}
+              onChange={(e) => handleTune(Number(e.target.value))}
+              className="input w-28 font-mono text-center text-sm"
+            />
+            <span className="text-xs text-white/25">MHz</span>
+          </div>
+
+          <div className="flex-1 flex items-center gap-3">
+            <span className="text-xs text-white/30">Vol</span>
+            <input
+              type="range" min="0" max="100" value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className="flex-1 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
+                         [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
+                         [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
+                         [&::-webkit-slider-thumb]:bg-accent"
+            />
+            <span className="text-xs font-mono text-white/30 w-8">{volume}%</span>
+          </div>
         </div>
       </div>
 
-      {/* Spectrum + meters */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
           <div className="flex items-center justify-between mb-3">
             <span className="label">Spectrum</span>
-            <span className="text-[10px] font-mono text-white/20">128 bins</span>
+            <span className="text-[10px] font-mono text-white/20">Wideband FM &middot; 200 kHz</span>
           </div>
           <SpectrumVisualizer isActive={audio.isPlaying} color="#6366f1" height={140} />
         </div>
-
-        <div className="space-y-4">
-          <div className="card p-5">
-            <span className="label">Signal</span>
-            <div className="mt-3">
-              <SignalMeter value={signalStrength} />
-            </div>
-          </div>
-
-          <div className="card p-5">
-            <span className="label">Volume</span>
-            <div className="mt-3 space-y-2">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                className="w-full h-1.5 bg-surface-2 rounded-full appearance-none cursor-pointer
-                           [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5
-                           [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full
-                           [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:shadow-lg"
-              />
-              <div className="text-center text-xs font-mono text-white/40">{volume}%</div>
-            </div>
-          </div>
+        <div className="card p-5">
+          <span className="label">Signal</span>
+          <div className="mt-3"><SignalMeter value={signalStrength} /></div>
         </div>
       </div>
 
-      {/* Presets */}
       <div className="card p-5">
         <span className="label">Presets</span>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mt-3">

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -21,10 +21,17 @@ function AMRadio() {
   const [signalStrength, setSignalStrength] = useState(0);
   const audio = useAudioStream();
 
+  // Keep gain node in sync with volume slider
+  useEffect(() => {
+    audio.setVolume(volume);
+  }, [volume, audio.setVolume]);
+
   const handleTune = useCallback((freq: number) => {
     setFrequency(Math.round(freq));
-    setSignalStrength(Math.floor(Math.random() * 35) + 35);
-  }, []);
+    if (audio.isPlaying) {
+      setSignalStrength(Math.floor(Math.random() * 30) + 40);
+    }
+  }, [audio.isPlaying]);
 
   const togglePlay = async () => {
     if (audio.isPlaying) {
@@ -32,6 +39,7 @@ function AMRadio() {
       setSignalStrength(0);
     } else {
       await audio.start(frequency, 'am');
+      audio.setVolume(volume);
       setSignalStrength(Math.floor(Math.random() * 30) + 50);
     }
   };
@@ -42,9 +50,10 @@ function AMRadio() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">AM Broadcast</h2>
-            <p className="text-xs text-white/30 font-mono mt-0.5">530 &ndash; 1700 kHz &middot; Amplitude Modulation</p>
+            <p className="text-xs text-white/30 font-mono mt-0.5">
+              530 &ndash; 1700 kHz &middot; Direct Sampling AM
+            </p>
           </div>
-
           <div className="flex items-center gap-3">
             {audio.error && <span className="text-xs text-danger">{audio.error}</span>}
             <button
@@ -52,7 +61,7 @@ function AMRadio() {
               disabled={audio.isConnecting}
               className={audio.isPlaying ? 'btn-danger' : 'btn-primary'}
             >
-              {audio.isConnecting ? 'Connecting...' : audio.isPlaying ? 'Stop' : 'Play'}
+              {audio.isConnecting ? 'Tuning...' : audio.isPlaying ? 'Stop' : 'Play'}
             </button>
           </div>
         </div>
@@ -70,54 +79,48 @@ function AMRadio() {
 
         <FrequencyDial value={frequency} onChange={handleTune} min={530} max={1700} step={10} color="#f59e0b" />
 
-        <div className="flex items-center gap-3 mt-4">
-          <input
-            type="number"
-            min={530}
-            max={1700}
-            step={10}
-            value={frequency}
-            onChange={(e) => handleTune(Number(e.target.value))}
-            className="input w-32 font-mono text-center"
-          />
-          <span className="text-xs text-white/30">Direct frequency entry (kHz)</span>
+        <div className="flex items-center gap-6 mt-5">
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min={530} max={1700} step={10} value={frequency}
+              onChange={(e) => handleTune(Number(e.target.value))}
+              className="input w-28 font-mono text-center text-sm"
+            />
+            <span className="text-xs text-white/25">kHz</span>
+          </div>
+          <div className="flex-1 flex items-center gap-3">
+            <span className="text-xs text-white/30">Vol</span>
+            <input
+              type="range" min="0" max="100" value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className="flex-1 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
+                         [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
+                         [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
+                         [&::-webkit-slider-thumb]:bg-warning"
+            />
+            <span className="text-xs font-mono text-white/30 w-8">{volume}%</span>
+          </div>
         </div>
+      </div>
+
+      <div className="card p-4 bg-amber-500/5 border-amber-500/10">
+        <p className="text-xs text-amber-300/70">
+          <strong>Note:</strong> AM reception uses direct sampling mode (-E direct).
+          Your RTL-SDR must support Q-branch direct sampling (RTL-SDR Blog V3 or modified dongle).
+          Connect antenna to the HF input if available.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="label">Spectrum</span>
-            <span className="text-[10px] font-mono text-white/20">AM Band</span>
+          <span className="label">Spectrum</span>
+          <div className="mt-3">
+            <SpectrumVisualizer isActive={audio.isPlaying} color="#f59e0b" height={140} />
           </div>
-          <SpectrumVisualizer isActive={audio.isPlaying} color="#f59e0b" height={140} />
         </div>
-
-        <div className="space-y-4">
-          <div className="card p-5">
-            <span className="label">Signal</span>
-            <div className="mt-3">
-              <SignalMeter value={signalStrength} color="#f59e0b" />
-            </div>
-          </div>
-
-          <div className="card p-5">
-            <span className="label">Volume</span>
-            <div className="mt-3 space-y-2">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                className="w-full h-1.5 bg-surface-2 rounded-full appearance-none cursor-pointer
-                           [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5
-                           [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full
-                           [&::-webkit-slider-thumb]:bg-warning [&::-webkit-slider-thumb]:shadow-lg"
-              />
-              <div className="text-center text-xs font-mono text-white/40">{volume}%</div>
-            </div>
-          </div>
+        <div className="card p-5">
+          <span className="label">Signal</span>
+          <div className="mt-3"><SignalMeter value={signalStrength} color="#f59e0b" /></div>
         </div>
       </div>
 

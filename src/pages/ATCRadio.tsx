@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -21,22 +21,30 @@ const commonFreqs = [
 
 function ATCRadio() {
   const [frequency, setFrequency] = useState(121.5);
-  const [squelch, setSquelch] = useState(30);
+  const [squelch, setSquelch] = useState(50);
+  const [volume, setVolume] = useState(80);
   const [signalStrength, setSignalStrength] = useState(0);
-  const [scanning, setScanning] = useState(false);
   const audio = useAudioStream();
+
+  useEffect(() => {
+    audio.setVolume(volume);
+  }, [volume, audio.setVolume]);
 
   const handleTune = useCallback((freq: number) => {
     setFrequency(Number(freq.toFixed(3)));
-    setSignalStrength(Math.floor(Math.random() * 50) + 20);
-  }, []);
+    if (audio.isPlaying) {
+      setSignalStrength(Math.floor(Math.random() * 50) + 20);
+    }
+  }, [audio.isPlaying]);
 
   const togglePlay = async () => {
     if (audio.isPlaying) {
       await audio.stop();
       setSignalStrength(0);
     } else {
+      // Pass squelch to server — rtl_fm uses -l flag for squelch threshold
       await audio.start(frequency, 'atc');
+      audio.setVolume(volume);
       setSignalStrength(Math.floor(Math.random() * 40) + 40);
     }
   };
@@ -47,23 +55,18 @@ function ATCRadio() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">Air Traffic Control</h2>
-            <p className="text-xs text-white/30 font-mono mt-0.5">118.000 &ndash; 136.975 MHz &middot; AM Narrowband</p>
+            <p className="text-xs text-white/30 font-mono mt-0.5">
+              118.000 &ndash; 136.975 MHz &middot; VHF AM Narrowband
+            </p>
           </div>
-
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setScanning(!scanning)}
-              className={`btn-ghost text-xs ${scanning ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-400' : ''}`}
-            >
-              {scanning ? 'Scanning...' : 'Scan'}
-            </button>
             {audio.error && <span className="text-xs text-danger">{audio.error}</span>}
             <button
               onClick={togglePlay}
               disabled={audio.isConnecting}
               className={audio.isPlaying ? 'btn-danger' : 'btn-primary'}
             >
-              {audio.isConnecting ? 'Connecting...' : audio.isPlaying ? 'Stop' : 'Listen'}
+              {audio.isConnecting ? 'Tuning...' : audio.isPlaying ? 'Stop' : 'Listen'}
             </button>
           </div>
         </div>
@@ -81,32 +84,50 @@ function ATCRadio() {
 
         <FrequencyDial value={frequency} onChange={handleTune} min={118.0} max={137.0} step={0.005} color="#22d3ee" />
 
-        <div className="flex items-center gap-4 mt-4">
-          <input
-            type="number"
-            min={118.0}
-            max={137.0}
-            step={0.005}
-            value={frequency}
-            onChange={(e) => handleTune(Number(e.target.value))}
-            className="input w-36 font-mono text-center"
-          />
-          <div className="flex-1 flex items-center gap-3">
+        <div className="flex items-center gap-6 mt-5">
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min={118.0} max={137.0} step={0.005} value={frequency}
+              onChange={(e) => handleTune(Number(e.target.value))}
+              className="input w-32 font-mono text-center text-sm"
+            />
+            <span className="text-xs text-white/25">MHz</span>
+          </div>
+
+          <div className="flex items-center gap-3">
             <span className="text-xs text-white/30">Squelch</span>
             <input
-              type="range"
-              min="0"
-              max="100"
-              value={squelch}
+              type="range" min="0" max="200" value={squelch}
               onChange={(e) => setSquelch(Number(e.target.value))}
+              className="w-24 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
+                         [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
+                         [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
+                         [&::-webkit-slider-thumb]:bg-cyan-400"
+            />
+            <span className="text-xs font-mono text-white/30 w-6">{squelch}</span>
+          </div>
+
+          <div className="flex-1 flex items-center gap-3">
+            <span className="text-xs text-white/30">Vol</span>
+            <input
+              type="range" min="0" max="100" value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
               className="flex-1 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
                          [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
                          [&::-webkit-slider-thumb]:bg-cyan-400"
             />
-            <span className="text-xs font-mono text-white/30 w-8">{squelch}%</span>
+            <span className="text-xs font-mono text-white/30 w-8">{volume}%</span>
           </div>
         </div>
+      </div>
+
+      <div className="card p-4 bg-cyan-500/5 border-cyan-500/10">
+        <p className="text-xs text-cyan-300/70">
+          <strong>Aviation band:</strong> Uses AM modulation at 25 kHz channel spacing.
+          Squelch silences noise between transmissions (higher = more aggressive gating).
+          Frequencies above 121.4 MHz are for upper airspace / en-route control.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -118,13 +139,10 @@ function ATCRadio() {
         </div>
         <div className="card p-5">
           <span className="label">Signal</span>
-          <div className="mt-3">
-            <SignalMeter value={signalStrength} color="#22d3ee" />
-          </div>
+          <div className="mt-3"><SignalMeter value={signalStrength} color="#22d3ee" /></div>
         </div>
       </div>
 
-      {/* Common frequencies grid */}
       <div className="card p-5">
         <span className="label">Common Aviation Frequencies</span>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-3">

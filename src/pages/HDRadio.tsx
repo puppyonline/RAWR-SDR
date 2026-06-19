@@ -7,7 +7,7 @@ import { useAudioStream } from '../hooks/useAudioStream';
 function HDRadio() {
   const [frequency, setFrequency] = useState(94.7);
   const [hdChannel, setHdChannel] = useState(1);
-  const [volume, setVolume] = useState(80);
+  const [volume, setVolumeState] = useState(80);
   const [signalStrength, setSignalStrength] = useState(0);
   const [metadata, setMetadata] = useState({
     station: '---',
@@ -131,8 +131,7 @@ function HDRadio() {
                 type="range"
                 min="0"
                 max="100"
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
+                value={volume}                onChange={(e) => { setVolumeState(Number(e.target.value)); audio.setVolume(Number(e.target.value)); }}
                 className="w-full h-1.5 bg-surface-2 rounded-full appearance-none cursor-pointer
                            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5
                            [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full
