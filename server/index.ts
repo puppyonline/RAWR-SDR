@@ -77,7 +77,8 @@ app.post('/api/tune', async (req, res) => {
   if (activeProcess) {
     activeProcess.kill('SIGTERM');
     activeProcess = null;
-    await new Promise((r) => setTimeout(r, 800));
+    // nrsc5 holds USB longer than rtl_fm, need more delay
+    await new Promise((r) => setTimeout(r, mode === 'hd' ? 1500 : 800));
   }
   currentRDS = {};
   currentMode = mode;

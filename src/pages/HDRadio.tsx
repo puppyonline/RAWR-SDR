@@ -53,27 +53,21 @@ function HDRadio() {
     if (power && !initialTune.current) {
       initialTune.current = true;
       audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
-      setMetadata({ station: `WXYZ-HD${hdChannel}`, artist: 'Decoding...', title: 'HD Stream', genre: 'HD Radio' });
+      setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Syncing...', title: '...', genre: '...' });
     }
     if (!power) initialTune.current = false;
   }, [power]);
 
+  // Single debounced retune that watches BOTH frequency and hdChannel
   useEffect(() => {
-    if (!power) return;
+    if (!power || !initialTune.current) return;
     if (tuneTimer.current) clearTimeout(tuneTimer.current);
     tuneTimer.current = setTimeout(() => {
       audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
-      setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Acquiring...', title: 'Decoding...', genre: 'HD Radio' });
-    }, 500);
+      setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Syncing...', title: '...', genre: '...' });
+    }, 800); // longer debounce for HD (nrsc5 needs more USB release time)
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
-  }, [frequency]);
-
-  // Retune when HD channel changes while powered on
-  useEffect(() => {
-    if (!power) return;
-    audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
-    setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Switching...', title: '...', genre: '...' });
-  }, [hdChannel]);
+  }, [frequency, hdChannel]);
 
   const togglePower = async () => {
     if (power) {
