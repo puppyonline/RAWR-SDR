@@ -39,15 +39,22 @@ function FMRadio() {
   const [volume, setVolume] = useState(80);
   const [signalStrength, setSignalStrength] = useState(0);
   const [power, setPower] = useState(false);
+  const [rds, setRDS] = useState<Record<string, any>>({});
   const audio = useAudioStream();
   const tuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialTune = useRef(false);
 
   useEffect(() => { audio.setVolume(volume); }, [volume, audio.setVolume]);
 
+  // Listen for RDS updates
+  useEffect(() => {
+    audio.onRDS((data) => setRDS({ ...data }));
+  }, [audio.onRDS]);
+
   useEffect(() => {
     if (power && !initialTune.current) {
       initialTune.current = true;
+      setRDS({});
       audio.tune(frequency, 'fm');
       setSignalStrength(Math.floor(Math.random() * 30) + 60);
     }
@@ -58,6 +65,7 @@ function FMRadio() {
     if (!power) return;
     if (tuneTimer.current) clearTimeout(tuneTimer.current);
     tuneTimer.current = setTimeout(() => {
+      setRDS({});
       audio.tune(frequency, 'fm');
       setSignalStrength(Math.floor(Math.random() * 30) + 55);
     }, 500);
@@ -136,6 +144,51 @@ function FMRadio() {
           <div className="mt-3"><SignalMeter value={signalStrength} /></div>
         </div>
       </div>
+
+      {/* RDS Data */}
+      {power && Object.keys(rds).length > 0 && (
+        <div className="card p-5">
+          <span className="label">RDS Data</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            {rds.ps && (
+              <div className="card-inner p-3">
+                <p className="text-[10px] text-white/30 uppercase mb-1">Station</p>
+                <p className="text-sm font-mono font-semibold text-white/90">{rds.ps}</p>
+              </div>
+            )}
+            {rds.radiotext && (
+              <div className="card-inner p-3 md:col-span-2">
+                <p className="text-[10px] text-white/30 uppercase mb-1">Radio Text</p>
+                <p className="text-sm text-white/80 truncate">{rds.radiotext}</p>
+              </div>
+            )}
+            {rds.prog_type && (
+              <div className="card-inner p-3">
+                <p className="text-[10px] text-white/30 uppercase mb-1">Genre</p>
+                <p className="text-sm text-white/70">{rds.prog_type}</p>
+              </div>
+            )}
+            {rds.artist && (
+              <div className="card-inner p-3">
+                <p className="text-[10px] text-white/30 uppercase mb-1">Artist</p>
+                <p className="text-sm text-white/80 truncate">{rds.artist}</p>
+              </div>
+            )}
+            {rds.title && (
+              <div className="card-inner p-3">
+                <p className="text-[10px] text-white/30 uppercase mb-1">Title</p>
+                <p className="text-sm text-white/80 truncate">{rds.title}</p>
+              </div>
+            )}
+            {rds.pi && (
+              <div className="card-inner p-3">
+                <p className="text-[10px] text-white/30 uppercase mb-1">PI Code</p>
+                <p className="text-xs font-mono text-white/50">{rds.pi}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="card p-5">
         <span className="label">Phoenix/Mesa Presets</span>

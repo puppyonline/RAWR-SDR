@@ -28,6 +28,7 @@ export function useAudioStream() {
   const nextTimeRef = useRef(0);
   const bufferQueueRef = useRef<Float32Array[]>([]);
   const processingRef = useRef(false);
+  const rdsCallbackRef = useRef<((data: any) => void) | null>(null);
 
   const processQueue = useCallback(() => {
     if (processingRef.current) return;
@@ -114,9 +115,18 @@ export function useAudioStream() {
     };
 
     ws.onmessage = (event) => {
-      if (!(event.data instanceof ArrayBuffer)) return;
+      if (!(event.data instanceof ArrayBuffer)) {
+        // Text messages are RDS JSON updates
+        try {
+          const msg = JSON.parse(event.data as string);
+          if (msg.type === 'rds' && rdsCallbackRef.current) {
+            rdsCallbackRef.current(msg.data);
+          }
+        } catch { /* ignore non-JSON */ }
+        return;
+      }
 
-      // rtl_fm outputs signed 16-bit little-endian PCM at 48kHz
+      // Binary = PCM audio data
       const int16 = new Int16Array(event.data);
       const float32 = new Float32Array(int16.length);
       for (let i = 0; i < int16.length; i++) {
@@ -201,6 +211,10 @@ export function useAudioStream() {
     }
   }, []);
 
+  const onRDS = useCallback((callback: (data: any) => void) => {
+    rdsCallbackRef.current = callback;
+  }, []);
+
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
@@ -208,5 +222,5 @@ export function useAudioStream() {
     };
   }, []);
 
-  return { ...state, tune, stop, setVolume };
+  return { ...state, tune, stop, setVolume, onRDS };
 }

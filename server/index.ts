@@ -14,7 +14,9 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 let activeProcess: ChildProcess | null = null;
+let redseaProcess: ChildProcess | null = null;
 let sdrDetected = false;
+let currentRDS: Record<string, any> = {};
 
 // Detect RTL-SDR on startup
 function detectSDR(): boolean {
@@ -28,11 +30,50 @@ function detectSDR(): boolean {
   }
 }
 
+// Check if redsea is available
+function hasRedsea(): boolean {
+  try {
+    const cmd = process.platform === 'win32' ? 'where redsea' : 'which redsea';
+    execSync(cmd, { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const redseaAvailable = hasRedsea();
+
 try {
   sdrDetected = detectSDR();
   console.log(`[RAWR-SDR] Device: ${sdrDetected ? 'DETECTED' : 'NOT FOUND'}`);
+  console.log(`[RAWR-SDR] Redsea: ${redseaAvailable ? 'AVAILABLE' : 'NOT FOUND (RDS disabled)'}`);
 } catch {
-  console.log('[RAWR-SDR] Device detection skipped');
+  console.log('[RAWR-SDR] Detection skipped');
+}
+
+/**
+ * Downsample 16-bit PCM from srcRate to dstRate using linear interpolation.
+ * Returns a new Buffer of 16-bit signed LE PCM at the target rate.
+ */
+function downsample(input: Buffer, srcRate: number, dstRate: number): Buffer {
+  const srcSamples = input.length / 2; // 16-bit = 2 bytes per sample
+  const ratio = srcRate / dstRate;
+  const dstSamples = Math.floor(srcSamples / ratio);
+  const output = Buffer.alloc(dstSamples * 2);
+
+  for (let i = 0; i < dstSamples; i++) {
+    const srcPos = i * ratio;
+    const srcIdx = Math.floor(srcPos);
+    const frac = srcPos - srcIdx;
+
+    const s0 = input.readInt16LE(srcIdx * 2);
+    const s1 = srcIdx + 1 < srcSamples ? input.readInt16LE((srcIdx + 1) * 2) : s0;
+    const interpolated = Math.round(s0 + (s1 - s0) * frac);
+
+    output.writeInt16LE(Math.max(-32768, Math.min(32767, interpolated)), i * 2);
+  }
+
+  return output;
 }
 
 // Status endpoint
@@ -43,115 +84,87 @@ app.get('/api/status', (_req, res) => {
     sampleRate: 2400000,
     gain: 'Auto',
     activeMode: activeProcess ? 'Streaming' : 'Idle',
+    redseaAvailable,
   });
 });
 
-/**
- * Tuning endpoint.
- *
- * Band-specific rtl_fm parameters:
- *
- * FM BROADCAST (87.5-108 MHz):
- *   - Modulation: wbfm (wideband FM)
- *   - Channel bandwidth: ~200 kHz
- *   - Audio sample rate: 48 kHz (resampled from 32k internal)
- *   - De-emphasis filter enabled (75us in NA, 50us in EU)
- *   - rtl_fm uses -M wbfm which internally sets -s 170k -o 4 -A fast -r 32k -E deemp
- *   - We override -r to 48000 for our AudioContext
- *
- * AM BROADCAST (530-1700 kHz):
- *   - Modulation: am
- *   - Requires DIRECT SAMPLING mode (-E direct) because the R820T/R820T2
- *     tuner chip only works down to ~24 MHz. Direct sampling bypasses the
- *     tuner and samples the ADC input directly (Q-branch), allowing
- *     reception of 0.5-28.8 MHz.
- *   - Channel bandwidth: 10 kHz (AM channels are spaced 10 kHz in NA)
- *   - Sample rate: 12 kHz for narrowband, resampled to 48 kHz output
- *   - Frequency specified in kHz (e.g., 880k for 880 kHz)
- *
- * ATC / AVIATION (118.000-136.975 MHz):
- *   - Modulation: am (aviation uses AM on VHF)
- *   - Channel spacing: 25 kHz (legacy) or 8.33 kHz (newer)
- *   - Sample rate: 12 kHz narrowband
- *   - Squelch enabled (-l) to silence noise between transmissions
- *   - Output resampled to 48 kHz
- *   - PPM correction recommended for accuracy at these frequencies
- *
- * HD RADIO (87.5-108 MHz):
- *   - Uses same FM band but digital sidebands (NRSC-5)
- *   - rtl_fm can only demodulate analog; for true HD you'd need nrsc5
- *   - We tune as wideband FM for analog fallback
- */
+// RDS data endpoint
+app.get('/api/rds', (_req, res) => {
+  res.json(currentRDS);
+});
+
+// Tuning endpoint
 app.post('/api/tune', async (req, res) => {
   const { frequency, mode, squelch } = req.body;
 
-  // Kill existing process and wait for USB device release
+  // Kill existing processes
+  if (redseaProcess) {
+    redseaProcess.kill('SIGTERM');
+    redseaProcess = null;
+  }
   if (activeProcess) {
     activeProcess.kill('SIGTERM');
     activeProcess = null;
-    // Windows needs time to release the USB device handle
     await new Promise((resolve) => setTimeout(resolve, 800));
   }
+  currentRDS = {};
 
   const isWin = process.platform === 'win32';
   const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
   const args: string[] = [];
+  let useFMWithRDS = false;
 
   switch (mode) {
     case 'fm':
-      // Wideband FM broadcast
-      // -E deemp applies proper 75µs de-emphasis in the demodulator
-      // (more accurate than client-side approximation)
-      args.push(
-        '-M', 'fm',
-        '-f', `${frequency}M`,
-        '-s', '192k',
-        '-r', '48000',
-        '-l', '0',
-        '-E', 'deemp',
-        '-g', '20',
-      );
+    case 'hd':
+      // For FM: run at 171kHz sample rate (required by redsea for RDS)
+      // We downsample to 48kHz in Node before sending to WebSocket
+      // AND pipe the raw 171k data to redsea for RDS decoding
+      if (redseaAvailable) {
+        useFMWithRDS = true;
+        args.push(
+          '-M', 'fm',
+          '-f', `${frequency}M`,
+          '-s', '171k',          // 171kHz = redsea's required rate
+          '-l', '0',
+          '-E', 'deemp',
+          '-g', '20',
+        );
+      } else {
+        // No redsea: use 192k with -r 48000 as before
+        args.push(
+          '-M', 'fm',
+          '-f', `${frequency}M`,
+          '-s', '192k',
+          '-r', '48000',
+          '-l', '0',
+          '-E', 'deemp',
+          '-g', '20',
+        );
+      }
       break;
 
     case 'am':
-      // AM broadcast band - REQUIRES direct sampling
-      // The RTL2832U ADC runs at 28.8 MHz, so direct sampling covers 0-14.4 MHz
-      // AM broadcast is 530-1700 kHz, well within range
       args.push(
         '-M', 'am',
         '-f', `${frequency}k`,
         '-s', '12k',
         '-r', '48000',
         '-l', '0',
-        '-g', '0',             // AGC
+        '-g', '0',
         '-E', 'direct',
       );
       break;
 
     case 'atc':
-      // Aviation VHF AM
-      // Standard tuner works fine at 118-137 MHz (R820T range is 24-1766 MHz)
-      // Aviation uses AM modulation with 25 kHz channel spacing
       args.push(
         '-M', 'am',
         '-f', `${frequency}M`,
         '-s', '12k',
         '-r', '48000',
         '-l', String(squelch || 50),
-        '-g', '0',             // AGC
+        '-g', '0',
         '-p', '0',
-      );
-      break;
-
-    case 'hd':
-      args.push(
-        '-M', 'fm',
-        '-f', `${frequency}M`,
-        '-s', '192k',
-        '-r', '48000',
-        '-l', '0',
-        '-E', 'deemp',
-        '-g', '20',
       );
       break;
 
@@ -170,15 +183,76 @@ app.post('/api/tune', async (req, res) => {
       if (msg) console.log(`[rtl_fm] ${msg}`);
     });
 
-    // rtl_fm outputs raw signed 16-bit little-endian PCM on stdout
-    // at the rate specified by -r (48000 Hz)
-    activeProcess.stdout?.on('data', (chunk: Buffer) => {
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(chunk);
+    if (useFMWithRDS) {
+      // Spawn redsea for RDS decoding
+      const redseaCmd = isWin ? 'redsea.exe' : 'redsea';
+      redseaProcess = spawn(redseaCmd, ['-r', '171k'], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      redseaProcess.stdout?.on('data', (data: Buffer) => {
+        // redsea outputs newline-delimited JSON
+        const lines = data.toString().split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const rds = JSON.parse(line);
+            // Merge RDS fields into our state
+            if (rds.ps) currentRDS.ps = rds.ps;
+            if (rds.radiotext) currentRDS.radiotext = rds.radiotext;
+            if (rds.prog_type) currentRDS.prog_type = rds.prog_type;
+            if (rds.pi) currentRDS.pi = rds.pi;
+            if (rds.tp !== undefined) currentRDS.tp = rds.tp;
+            if (rds.ta !== undefined) currentRDS.ta = rds.ta;
+            if (rds.is_music !== undefined) currentRDS.is_music = rds.is_music;
+            if (rds.radiotext_plus) {
+              const rtp = rds.radiotext_plus;
+              if (rtp.tags) {
+                for (const tag of rtp.tags) {
+                  if (tag['content-type'] === 'item.title') currentRDS.title = tag.data;
+                  if (tag['content-type'] === 'item.artist') currentRDS.artist = tag.data;
+                }
+              }
+            }
+            // Broadcast RDS update to clients
+            const rdsMsg = JSON.stringify({ type: 'rds', data: currentRDS });
+            wss.clients.forEach((client) => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(rdsMsg);
+              }
+            });
+          } catch { /* skip malformed lines */ }
         }
       });
-    });
+
+      redseaProcess.stderr?.on('data', (data: Buffer) => {
+        const msg = data.toString().trim();
+        if (msg) console.log(`[redsea] ${msg}`);
+      });
+
+      redseaProcess.on('close', () => { redseaProcess = null; });
+
+      // Pipe rtl_fm stdout: downsample for audio AND feed to redsea
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        // Feed raw 171k data to redsea
+        if (redseaProcess && redseaProcess.stdin?.writable) {
+          redseaProcess.stdin.write(chunk);
+        }
+        // Downsample 171kHz -> 48kHz for audio playback
+        const audioChunk = downsample(chunk, 171000, 48000);
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(audioChunk);
+          }
+        });
+      });
+    } else {
+      // Non-FM modes or no redsea: just forward PCM directly
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(chunk);
+          }
+        });
+      });
+    }
 
     activeProcess.on('error', (err) => {
       console.error(`[rtl_fm] Spawn error: ${err.message}`);
@@ -188,9 +262,13 @@ app.post('/api/tune', async (req, res) => {
     activeProcess.on('close', (code) => {
       console.log(`[rtl_fm] Process exited (code ${code})`);
       activeProcess = null;
+      if (redseaProcess) {
+        redseaProcess.kill('SIGTERM');
+        redseaProcess = null;
+      }
     });
 
-    res.json({ success: true, frequency, mode, command: `${rtlFm} ${args.join(' ')}` });
+    res.json({ success: true, frequency, mode, rds: useFMWithRDS });
   } catch (err: any) {
     res.status(500).json({ error: `Failed to start: ${err.message}` });
   }
@@ -198,56 +276,53 @@ app.post('/api/tune', async (req, res) => {
 
 // Stop streaming
 app.post('/api/stop', (_req, res) => {
+  if (redseaProcess) {
+    redseaProcess.kill('SIGTERM');
+    redseaProcess = null;
+  }
   if (activeProcess) {
     activeProcess.kill('SIGTERM');
     activeProcess = null;
     console.log('[RAWR-SDR] Stream stopped');
   }
+  currentRDS = {};
   res.json({ success: true });
 });
 
-// ADS-B tracking via dump1090
+// ADS-B
 app.post('/api/adsb/start', (_req, res) => {
   if (activeProcess) {
     activeProcess.kill('SIGTERM');
     activeProcess = null;
   }
-
   const cmd = process.platform === 'win32' ? 'dump1090.exe' : 'dump1090';
   try {
     activeProcess = spawn(cmd, ['--interactive', '--net'], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-    activeProcess.on('error', (err) => {
-      console.error(`[dump1090] Error: ${err.message}`);
-      activeProcess = null;
-    });
-
-    activeProcess.on('close', (code) => {
-      console.log(`[dump1090] Exited (code ${code})`);
-      activeProcess = null;
-    });
-
+    activeProcess.on('error', (err) => { console.error(`[dump1090] ${err.message}`); activeProcess = null; });
+    activeProcess.on('close', (code) => { console.log(`[dump1090] Exited (${code})`); activeProcess = null; });
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: `Failed to start dump1090: ${err.message}` });
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/adsb/stop', (_req, res) => {
-  if (activeProcess) {
-    activeProcess.kill('SIGTERM');
-    activeProcess = null;
-  }
+  if (activeProcess) { activeProcess.kill('SIGTERM'); activeProcess = null; }
   res.json({ success: true });
 });
 
-// WebSocket handling
+// WebSocket
 wss.on('connection', (ws) => {
   console.log('[WS] Client connected');
+  // Send current RDS data immediately on connect
+  if (Object.keys(currentRDS).length > 0) {
+    ws.send(JSON.stringify({ type: 'rds', data: currentRDS }));
+  }
   ws.on('close', () => {
     console.log('[WS] Client disconnected');
     if (wss.clients.size === 0 && activeProcess) {
-      console.log('[WS] No clients, stopping stream');
+      console.log('[WS] No clients, stopping');
+      if (redseaProcess) { redseaProcess.kill('SIGTERM'); redseaProcess = null; }
       activeProcess.kill('SIGTERM');
       activeProcess = null;
     }
@@ -257,7 +332,6 @@ wss.on('connection', (ws) => {
 server.listen(PORT, () => {
   console.log(`[RAWR-SDR] Server: http://localhost:${PORT}`);
   console.log(`[RAWR-SDR] WS: ws://localhost:${PORT}/ws`);
-  if (!sdrDetected) {
-    console.log('[RAWR-SDR] No RTL-SDR detected. Ensure rtl_fm is in PATH.');
-  }
+  if (!sdrDetected) console.log('[RAWR-SDR] No RTL-SDR detected.');
+  if (!redseaAvailable) console.log('[RAWR-SDR] redsea not found. Install for RDS: https://github.com/windytan/redsea');
 });
