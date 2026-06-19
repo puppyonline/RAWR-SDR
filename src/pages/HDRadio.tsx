@@ -68,6 +68,13 @@ function HDRadio() {
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency]);
 
+  // Retune when HD channel changes while powered on
+  useEffect(() => {
+    if (!power) return;
+    audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
+    setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Switching...', title: '...', genre: '...' });
+  }, [hdChannel]);
+
   const togglePower = async () => {
     if (power) {
       setPower(false);
