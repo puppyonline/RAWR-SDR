@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
 import { useTVShowInfo } from '../hooks/useMetadata';
-import { useTVPlayer } from '../hooks/useTVPlayer';
+import { useTVPlayer, getTVVideoElement } from '../hooks/useTVPlayer';
+import type { TVChannel } from '../hooks/useTVPlayer';
 
 interface Channel {
   GuideNumber: string;
@@ -43,11 +45,37 @@ function TVPage() {
   const [guide, setGuide] = useState<GuideChannel[]>([]);
   const [hdhrStatus, setHdhrStatus] = useState<any>(null);
   const [localError, setLocalError] = useState('');
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
-  const { state, videoRef, tuneChannel, stopPlayback } = useTVPlayer();
+  const { state, tuneChannel, stopPlayback } = useTVPlayer();
   const { selectedChannel, isPlaying, isBuffering, error, loadingBlurb } = state;
 
-  // Fetch lineup and status on mount
+  // Move the shared video element into our container
+  useEffect(() => {
+    const grabVideo = () => {
+      const video = getTVVideoElement();
+      const container = videoContainerRef.current;
+      if (video && container && video.parentElement !== container) {
+        video.className = 'w-full h-full';
+        container.appendChild(video);
+      }
+    };
+    grabVideo();
+    // Retry after a short delay in case of race conditions
+    const timer = setTimeout(grabVideo, 100);
+    return () => {
+      clearTimeout(timer);
+      // Move video back to the provider root
+      const video = getTVVideoElement() || videoContainerRef.current?.querySelector('video');
+      const root = document.getElementById('tv-player-root');
+      if (video && root && video.parentElement !== root) {
+        video.className = 'w-full h-full object-cover';
+        root.appendChild(video);
+      }
+    };
+  }, []);
+
+  // Fetch lineup and status
   useEffect(() => {
     const init = async () => {
       await new Promise((r) => setTimeout(r, 300));
@@ -79,8 +107,7 @@ function TVPage() {
       if (!res.ok) throw new Error('Failed to get lineup');
       const data = await res.json();
       const filtered = data.filter((ch: any) => {
-        const num = parseFloat(ch.GuideNumber);
-        if (num >= 100) return false;
+        if (parseFloat(ch.GuideNumber) >= 100) return false;
         if (ch.DRM) return false;
         return true;
       });
@@ -94,16 +121,18 @@ function TVPage() {
     try {
       const res = await fetch('/api/hdhr/guide');
       if (!res.ok) return;
-      const data = await res.json();
-      setGuide(data);
-    } catch { /* guide is optional */ }
+      setGuide(await res.json());
+    } catch {}
   };
 
   const getCurrentProgram = (guideNumber: string): GuideEntry | null => {
     const now = Math.floor(Date.now() / 1000);
     const ch = guide.find((g) => g.GuideNumber === guideNumber);
-    if (!ch?.Guide) return null;
-    return ch.Guide.find((p) => p.StartTime <= now && p.EndTime > now) || null;
+    return ch?.Guide?.find((p) => p.StartTime <= now && p.EndTime > now) || null;
+  };
+
+  const handleTune = (ch: Channel) => {
+    tuneChannel({ GuideNumber: ch.GuideNumber, GuideName: ch.GuideName });
   };
 
   const displayError = error || localError;
@@ -119,8 +148,9 @@ function TVPage() {
           </div>
           <div className="flex items-center gap-3">
             {displayError && <span className="text-xs text-danger">{displayError}</span>}
+            <Link to="/guide" className="btn-ghost btn-sm">TV Guide</Link>
             <span className={`badge ${hdhrStatus?.connected ? 'badge-live' : hdhrStatus === null ? 'badge-brand' : 'bg-danger/10 text-danger border border-danger/20'}`}>
-              {hdhrStatus?.connected ? 'HDHomeRun Connected' : hdhrStatus === null ? 'Connecting...' : 'No Device'}
+              {hdhrStatus?.connected ? 'Connected' : hdhrStatus === null ? 'Connecting...' : 'No Device'}
             </span>
           </div>
         </div>
@@ -129,8 +159,8 @@ function TVPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Video Player with Overlay */}
         <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col">
-          <VideoPlayerWithOverlay
-            videoRef={videoRef}
+          <VideoPlayerOverlay
+            videoContainerRef={videoContainerRef}
             isPlaying={isPlaying}
             isBuffering={isBuffering}
             selectedChannel={selectedChannel}
@@ -148,51 +178,45 @@ function TVPage() {
               <span className="label">Channels ({channels.length})</span>
             </div>
             <div className="divide-y divide-white/[0.04] overflow-y-auto flex-1 min-h-0">
-            {channels.map((ch) => {
-              const program = getCurrentProgram(ch.GuideNumber);
-              const meta = channelMeta[ch.GuideNumber.split('.')[0]];
-              const isActive = selectedChannel?.GuideNumber === ch.GuideNumber;
+              {channels.map((ch) => {
+                const program = getCurrentProgram(ch.GuideNumber);
+                const meta = channelMeta[ch.GuideNumber.split('.')[0]];
+                const isActive = selectedChannel?.GuideNumber === ch.GuideNumber;
 
-              return (
-                <button
-                  key={ch.GuideNumber}
-                  onClick={() => tuneChannel(ch)}
-                  className={`w-full text-left px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${
-                    isActive ? 'bg-brand/5 border-l-2 border-brand' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {(() => {
-                      const logoUrl = meta?.logo || getTVStationLogo(ch.GuideName);
-                      if (logoUrl) {
-                        return <img src={logoUrl} alt={ch.GuideName} className="w-6 h-6 object-contain rounded-sm shrink-0" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
-                      }
-                      if (meta) {
-                        return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0" style={{ backgroundColor: `${meta.color}30`, color: meta.color }}>{meta.network}</span>;
-                      }
-                      return <div className="w-6 h-6 rounded-sm bg-bg-raised shrink-0" />;
-                    })()}
-                    <span className="text-xs font-mono text-zinc-400 w-8">{ch.GuideNumber}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{ch.GuideName}</div>
-                      {program && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] text-zinc-500 truncate">{program.Title}</span>
-                          <span className="text-[10px] text-zinc-600 shrink-0">
-                            &middot; {Math.ceil((program.EndTime - Math.floor(Date.now() / 1000)) / 60)}m
-                          </span>
-                        </div>
-                      )}
+                return (
+                  <button
+                    key={ch.GuideNumber}
+                    onClick={() => handleTune(ch)}
+                    className={`w-full text-left px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${
+                      isActive ? 'bg-brand/5 border-l-2 border-brand' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {(() => {
+                        const logoUrl = meta?.logo || getTVStationLogo(ch.GuideName);
+                        if (logoUrl) return <img src={logoUrl} alt="" className="w-6 h-6 object-contain rounded-sm shrink-0" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+                        if (meta) return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0" style={{ backgroundColor: `${meta.color}30`, color: meta.color }}>{meta.network}</span>;
+                        return <div className="w-6 h-6 rounded-sm bg-bg-raised shrink-0" />;
+                      })()}
+                      <span className="text-xs font-mono text-zinc-400 w-8">{ch.GuideNumber}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{ch.GuideName}</div>
+                        {program && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-zinc-500 truncate">{program.Title}</span>
+                            <span className="text-[10px] text-zinc-600 shrink-0">&middot; {Math.ceil((program.EndTime - Math.floor(Date.now() / 1000)) / 60)}m</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
-            {channels.length === 0 && (
-              <div className="p-6 text-center text-zinc-500 text-sm">
-                {hdhrStatus?.connected ? 'Loading channels...' : 'No HDHomeRun detected on network'}
-              </div>
-            )}
+                  </button>
+                );
+              })}
+              {channels.length === 0 && (
+                <div className="p-6 text-center text-zinc-500 text-sm">
+                  {hdhrStatus?.connected ? 'Loading channels...' : 'No HDHomeRun detected'}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -201,43 +225,24 @@ function TVPage() {
   );
 }
 
-// ─── Video Player with Custom Overlay ────────────────────────────────────────
+// ─── Video Player Overlay Component ──────────────────────────────────────────
 
-function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
-  videoRef: React.RefObject<HTMLVideoElement>;
+function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
+  videoContainerRef: React.RefObject<HTMLDivElement>;
   isPlaying: boolean;
   isBuffering: boolean;
-  selectedChannel: Channel | null;
+  selectedChannel: TVChannel | null;
   guide: GuideChannel[];
   channelMeta: Record<string, { network: string; color: string; logo?: string }>;
   loadingBlurb: string;
   onStop: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setTick] = useState(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Move the shared video element into our container when mounted
-  useEffect(() => {
-    const video = videoRef.current;
-    const container = videoContainerRef.current;
-    if (video && container) {
-      video.className = 'w-full h-full';
-      video.style.display = '';
-      container.appendChild(video);
-    }
-    return () => {
-      // When unmounting, hide the video but don't stop playback
-      if (video) {
-        video.className = 'hidden';
-      }
-    };
-  }, [videoRef]);
-
-  // Get current show info
   const now = Math.floor(Date.now() / 1000);
   const guideChannel = selectedChannel ? guide.find((g) => g.GuideNumber === selectedChannel.GuideNumber) : null;
   const entries = guideChannel?.Guide || [];
@@ -245,25 +250,17 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
   const next = entries.find((e) => e.StartTime > now);
   const network = selectedChannel ? channelMeta[selectedChannel.GuideNumber.split('.')[0]]?.network : undefined;
 
-  // Fetch TVmaze show info
   const showInfo = useTVShowInfo(current?.Title);
 
-  // Calculate progress
-  const progress = current
-    ? Math.min(100, Math.round(((now - current.StartTime) / (current.EndTime - current.StartTime)) * 100))
-    : 0;
+  const progress = current ? Math.min(100, Math.round(((now - current.StartTime) / (current.EndTime - current.StartTime)) * 100)) : 0;
   const timeRemaining = current ? Math.max(0, Math.ceil((current.EndTime - now) / 60)) : 0;
+  const formatTime = (epoch: number) => new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-  const formatTime = (epoch: number) =>
-    new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-  // Re-render every 30s for time updates
   useEffect(() => {
     const interval = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Show overlay on mouse move / tap, auto-hide after 4s
   const revealOverlay = useCallback(() => {
     if (!isPlaying) return;
     setShowOverlay(true);
@@ -271,11 +268,10 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
     hideTimer.current = setTimeout(() => setShowOverlay(false), 4000);
   }, [isPlaying]);
 
-  // Track fullscreen state
   useEffect(() => {
-    const onFSChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onFSChange);
-    return () => document.removeEventListener('fullscreenchange', onFSChange);
+    const onFS = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFS);
+    return () => document.removeEventListener('fullscreenchange', onFS);
   }, []);
 
   const toggleFullscreen = () => {
@@ -285,10 +281,9 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
   };
 
   const togglePlayPause = () => {
-    const video = videoRef.current;
+    const video = videoContainerRef.current?.querySelector('video');
     if (!video) return;
-    if (video.paused) video.play();
-    else video.pause();
+    if (video.paused) video.play(); else video.pause();
   };
 
   return (
@@ -302,7 +297,7 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
       {/* Video element mount point */}
       <div ref={videoContainerRef} className="w-full h-full" />
 
-      {/* Idle state */}
+      {/* Idle */}
       {!isPlaying && !isBuffering && !selectedChannel && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
           <div className="text-center">
@@ -312,7 +307,7 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
         </div>
       )}
 
-      {/* Buffering state */}
+      {/* Buffering */}
       {isBuffering && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
           <div className="text-center space-y-4">
@@ -331,41 +326,29 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
         </div>
       )}
 
-      {/* ─── Custom Overlay (shows on hover/tap) ─────────────────────── */}
+      {/* Overlay */}
       {isPlaying && selectedChannel && (
-        <div
-          className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none ${
-            showOverlay ? 'opacity-100' : 'opacity-0'
-          }`}
-        >
-          {/* Top-left: channel badge */}
+        <div className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none ${showOverlay ? 'opacity-100' : 'opacity-0'}`}>
+          {/* Top */}
           <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-5 pointer-events-auto">
             <div className="flex items-center gap-2.5">
               <span className="text-base font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
               <span className="text-base font-semibold text-white drop-shadow-lg">{selectedChannel.GuideName}</span>
-              {network && (
-                <span className="text-xs text-white/70 bg-white/15 backdrop-blur-sm rounded-md px-2 py-0.5 font-medium">{network}</span>
-              )}
+              {network && <span className="text-xs text-white/70 bg-white/15 backdrop-blur-sm rounded-md px-2 py-0.5 font-medium">{network}</span>}
             </div>
           </div>
 
-          {/* Bottom: show info + controls */}
+          {/* Bottom */}
           <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-16 pb-5 px-5 pointer-events-auto">
             {current && (
               <div className="flex items-end gap-4 mb-4">
                 {showInfo?.image && (
-                  <img
-                    src={showInfo.image}
-                    alt={showInfo.name}
-                    className="w-16 h-24 rounded-lg object-cover shrink-0 shadow-2xl hidden sm:block ring-1 ring-white/10"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
+                  <img src={showInfo.image} alt="" className="w-16 h-24 rounded-lg object-cover shrink-0 shadow-2xl hidden sm:block ring-1 ring-white/10"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                 )}
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg font-bold text-white drop-shadow-lg leading-tight">{current.Title}</h3>
-                  {current.EpisodeTitle && (
-                    <p className="text-sm text-white/70 mt-0.5 drop-shadow">&ldquo;{current.EpisodeTitle}&rdquo;</p>
-                  )}
+                  {current.EpisodeTitle && <p className="text-sm text-white/70 mt-0.5">&ldquo;{current.EpisodeTitle}&rdquo;</p>}
                   <div className="flex items-center gap-2.5 mt-2 flex-wrap">
                     {showInfo?.rating && (
                       <span className="flex items-center gap-1 text-sm text-yellow-400 font-medium">
@@ -376,20 +359,16 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
                     {showInfo?.genres.slice(0, 3).map((g) => (
                       <span key={g} className="text-xs text-white/70 bg-white/10 backdrop-blur-sm rounded-md px-2 py-0.5">{g}</span>
                     ))}
-                    {timeRemaining > 0 && (
-                      <span className="text-xs text-white/50 font-mono">{timeRemaining} min left</span>
-                    )}
+                    {timeRemaining > 0 && <span className="text-xs text-white/50 font-mono">{timeRemaining} min left</span>}
                   </div>
                   {(current.Synopsis || showInfo?.summary) && (
-                    <p className="text-sm text-white/60 mt-2 line-clamp-2 leading-relaxed max-w-2xl hidden sm:block">
-                      {current.Synopsis || showInfo?.summary}
-                    </p>
+                    <p className="text-sm text-white/60 mt-2 line-clamp-2 leading-relaxed max-w-2xl hidden sm:block">{current.Synopsis || showInfo?.summary}</p>
                   )}
                   {showInfo?.cast && showInfo.cast.length > 0 && (
                     <div className="flex items-center gap-3 mt-2.5 hidden md:flex">
                       {showInfo.cast.slice(0, 4).map((c) => (
                         <div key={c.name} className="flex items-center gap-1.5">
-                          {c.image && <img src={c.image} alt={c.name} className="w-6 h-6 rounded-full object-cover ring-1 ring-white/20" />}
+                          {c.image && <img src={c.image} alt="" className="w-6 h-6 rounded-full object-cover ring-1 ring-white/20" />}
                           <span className="text-xs text-white/60">{c.name}</span>
                         </div>
                       ))}
@@ -399,46 +378,30 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
               </div>
             )}
 
-            {/* Progress bar */}
             {current && (
               <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mb-4 cursor-pointer group">
                 <div className="h-full bg-tv rounded-full transition-all duration-1000 group-hover:bg-tv/90" style={{ width: `${progress}%` }} />
               </div>
             )}
 
-            {/* Controls */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <button onClick={togglePlayPause} className="text-white/90 hover:text-white transition-colors hover:scale-110 active:scale-95">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                    {videoRef.current?.paused
-                      ? <path d="M8 5v14l11-7z"/>
-                      : <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>
-                    }
-                  </svg>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 </button>
                 <button onClick={onStop} className="text-white/60 hover:text-red-400 transition-colors hover:scale-110 active:scale-95">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                 </button>
-                {current && (
-                  <span className="text-sm text-white/60 font-mono ml-1">
-                    {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
-                  </span>
-                )}
+                {current && <span className="text-sm text-white/60 font-mono ml-1">{formatTime(current.StartTime)} – {formatTime(current.EndTime)}</span>}
               </div>
               <div className="flex items-center gap-4">
-                {next && (
-                  <span className="text-sm text-white/50 hidden sm:inline">
-                    Next: <span className="text-white/70">{next.Title}</span>
-                  </span>
-                )}
+                {next && <span className="text-sm text-white/50 hidden sm:inline">Next: <span className="text-white/70">{next.Title}</span></span>}
                 <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors hover:scale-110 active:scale-95">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    {isFullscreen ? (
-                      <><path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/></>
-                    ) : (
-                      <><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></>
-                    )}
+                    {isFullscreen
+                      ? <><path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/></>
+                      : <><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></>
+                    }
                   </svg>
                 </button>
               </div>

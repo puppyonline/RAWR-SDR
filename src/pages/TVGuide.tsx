@@ -8,13 +8,11 @@ interface GuideEntry {
   StartTime: number;
   EndTime: number;
   Synopsis?: string;
-  ImageURL?: string;
 }
 
 interface GuideChannel {
   GuideNumber: string;
   GuideName: string;
-  ImageURL?: string;
   Guide?: GuideEntry[];
 }
 
@@ -24,7 +22,7 @@ function TVGuide() {
   const [selectedProgram, setSelectedProgram] = useState<{ channel: GuideChannel; program: GuideEntry } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const { state, tuneChannel } = useTVPlayer();
+  const { state, tuneChannel, stopPlayback } = useTVPlayer();
 
   useEffect(() => {
     fetchGuide();
@@ -35,25 +33,30 @@ function TVGuide() {
       const res = await fetch('/api/hdhr/guide');
       if (res.ok) {
         const data = await res.json();
-        const filtered = data.filter((ch: any) => {
-          const num = parseFloat(ch.GuideNumber);
-          if (num >= 100) return false;
-          return true;
-        });
+        const filtered = data.filter((ch: any) => parseFloat(ch.GuideNumber) < 100);
         setGuide(filtered);
       }
-    } catch { /* ignore */ }
+    } catch {}
     setLoading(false);
   };
 
-  const handleWatchChannel = (channel: GuideChannel) => {
-    // Tune via shared context then navigate to live TV
-    tuneChannel({
-      GuideNumber: channel.GuideNumber,
-      GuideName: channel.GuideName,
-      URL: '',
-    });
+  const handleWatchChannel = (ch: GuideChannel) => {
+    tuneChannel({ GuideNumber: ch.GuideNumber, GuideName: ch.GuideName });
     navigate('/tv');
+  };
+
+  const handleProgramClick = (channel: GuideChannel, program: GuideEntry) => {
+    const now = Math.floor(Date.now() / 1000);
+    const isCurrentlyAiring = program.StartTime <= now && program.EndTime > now;
+
+    if (isCurrentlyAiring) {
+      // Tune to this channel and go to live TV
+      tuneChannel({ GuideNumber: channel.GuideNumber, GuideName: channel.GuideName });
+      navigate('/tv');
+    } else {
+      // Show program details
+      setSelectedProgram({ channel, program });
+    }
   };
 
   const now = Math.floor(Date.now() / 1000);
@@ -66,13 +69,10 @@ function TVGuide() {
     timeSlots.push(t);
   }
 
-  const formatTime = (ts: number) => {
-    return new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  };
+  const formatTime = (ts: number) =>
+    new Date(ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-  const getPosition = (ts: number) => {
-    return ((ts - startTime) / totalDuration) * 100;
-  };
+  const getPosition = (ts: number) => ((ts - startTime) / totalDuration) * 100;
 
   const getWidth = (start: number, end: number) => {
     const clampedStart = Math.max(start, startTime);
@@ -92,7 +92,7 @@ function TVGuide() {
     return (
       <div className="card p-8 text-center">
         <p className="text-zinc-400">No guide data available.</p>
-        <p className="text-xs text-zinc-600 mt-2">Make sure your HDHomeRun is connected and has scanned channels.</p>
+        <p className="text-xs text-zinc-600 mt-2">Make sure your HDHomeRun is connected.</p>
         <Link to="/tv" className="btn-brand btn-sm mt-4 inline-flex">Go to Live TV</Link>
       </div>
     );
@@ -103,14 +103,18 @@ function TVGuide() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="section-title">TV Guide</h1>
-          <p className="section-subtitle mt-0.5">{guide.length} channels &middot; {formatTime(startTime)} &ndash; {formatTime(endTime)}</p>
+          <p className="section-subtitle mt-0.5">
+            {guide.length} channels &middot; {formatTime(startTime)} &ndash; {formatTime(endTime)}
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* Show current playback status */}
           {state.selectedChannel && (
-            <span className="text-xs text-zinc-400">
-              Playing: <span className="text-tv font-medium">{state.selectedChannel.GuideName}</span>
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-tv animate-pulse" />
+              <span className="text-xs text-zinc-400">
+                <span className="text-tv font-medium">{state.selectedChannel.GuideName}</span>
+              </span>
+            </div>
           )}
           <Link to="/tv" className="btn-ghost btn-sm">Watch Live</Link>
         </div>
@@ -125,19 +129,12 @@ function TVGuide() {
           </div>
           <div className="flex-1 relative h-8">
             {timeSlots.map((ts) => (
-              <div
-                key={ts}
-                className="absolute top-0 h-full border-l border-bg-border flex items-center pl-2"
-                style={{ left: `${getPosition(ts)}%` }}
-              >
+              <div key={ts} className="absolute top-0 h-full border-l border-bg-border flex items-center pl-2"
+                style={{ left: `${getPosition(ts)}%` }}>
                 <span className="text-2xs text-zinc-500 font-mono">{formatTime(ts)}</span>
               </div>
             ))}
-            {/* Now indicator */}
-            <div
-              className="absolute top-0 h-full w-0.5 bg-brand z-10"
-              style={{ left: `${getPosition(now)}%` }}
-            />
+            <div className="absolute top-0 h-full w-0.5 bg-brand z-10" style={{ left: `${getPosition(now)}%` }} />
           </div>
         </div>
 
@@ -147,8 +144,8 @@ function TVGuide() {
             const isCurrentlyPlaying = state.selectedChannel?.GuideNumber === ch.GuideNumber;
 
             return (
-              <div key={ch.GuideNumber} className={`flex border-b border-bg-border last:border-0 hover:bg-bg-hover/30 transition-colors ${isCurrentlyPlaying ? 'bg-tv/[0.03]' : ''}`}>
-                {/* Channel label — clickable to tune */}
+              <div key={ch.GuideNumber} className={`flex border-b border-bg-border last:border-0 hover:bg-bg-hover/30 transition-colors ${isCurrentlyPlaying ? 'bg-tv/[0.04]' : ''}`}>
+                {/* Channel label — click to tune */}
                 <button
                   onClick={() => handleWatchChannel(ch)}
                   className="w-32 md:w-40 shrink-0 p-2 border-r border-bg-border flex items-center gap-2 hover:bg-bg-hover/50 transition-colors text-left"
@@ -168,14 +165,14 @@ function TVGuide() {
                     return (
                       <button
                         key={i}
-                        onClick={() => setSelectedProgram({ channel: ch, program })}
+                        onClick={() => handleProgramClick(ch, program)}
                         className={`absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden border transition-colors cursor-pointer ${
                           isCurrent
                             ? 'bg-brand/10 border-brand/30 hover:bg-brand/20'
                             : 'bg-bg-raised border-bg-border hover:bg-bg-hover'
                         }`}
                         style={{ left: `${left}%`, width: `${width}%` }}
-                        title={program.Title}
+                        title={`${program.Title}${isCurrent ? ' (click to watch)' : ''}`}
                       >
                         <span className={`text-2xs truncate block ${isCurrent ? 'text-brand-bright font-medium' : 'text-zinc-400'}`}>
                           {program.Title}
@@ -219,7 +216,7 @@ function TVGuide() {
           </div>
           <div className="mt-4">
             <button onClick={() => handleWatchChannel(selectedProgram.channel)} className="btn-brand btn-sm">
-              Watch Now
+              Watch {selectedProgram.channel.GuideName}
             </button>
           </div>
         </div>
