@@ -103,12 +103,15 @@ function TVPage() {
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/hdhr/status');
+      if (!res.ok) return; // Silently handle transient errors
       const data = await res.json();
       setHdhrStatus(data);
       if (!data?.connected) {
         setTimeout(async () => {
-          const retry = await fetch('/api/hdhr/status');
-          setHdhrStatus(await retry.json());
+          try {
+            const retry = await fetch('/api/hdhr/status');
+            if (retry.ok) setHdhrStatus(await retry.json());
+          } catch {}
         }, 2000);
       }
     } catch { setHdhrStatus(null); }
@@ -140,10 +143,21 @@ function TVPage() {
       playerRef.current.destroy();
       playerRef.current = null;
     }
+
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+      video.load(); // Reset the video element cleanly
+    }
+
     setIsPlaying(false);
     setIsBuffering(true);
     setError('');
     setSelectedChannel(channel);
+
+    // Small delay to let the old stream fully teardown
+    await new Promise((r) => setTimeout(r, 100));
 
     const mpegts = await import('mpegts.js');
     if (!mpegts.default.isSupported()) {
@@ -152,7 +166,6 @@ function TVPage() {
       return;
     }
 
-    const video = videoRef.current;
     if (!video) { setIsBuffering(false); return; }
 
     video.onplaying = () => { setIsBuffering(false); setIsPlaying(true); };
