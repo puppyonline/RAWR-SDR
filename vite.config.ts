@@ -6,6 +6,11 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      '/api/hdhr/stream': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        timeout: 0, // no timeout for live streams
+      },
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,

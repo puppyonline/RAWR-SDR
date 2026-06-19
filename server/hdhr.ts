@@ -45,6 +45,10 @@ async function discoverDevice(): Promise<any> {
         if (!cachedDevice.BaseURL) {
           cachedDevice.BaseURL = data.LocalIP ? `http://${data.LocalIP}` : `http://${host}`;
         }
+        // Always prefer IP-based URL to avoid .local mDNS resolution issues
+        if (data.LocalIP) {
+          cachedDevice.BaseURL = `http://${data.LocalIP}`;
+        }
         console.log(`[HDHR] Found: ${data.FriendlyName} (${data.DeviceID}) at ${cachedDevice.BaseURL}`);
         return cachedDevice;
       }
@@ -153,9 +157,16 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
     method: 'GET',
     headers: { 'Connection': 'keep-alive' },
   }, (upstream) => {
+    console.log(`[HDHR] Stream response: ${upstream.statusCode} ${upstream.headers['content-type'] || 'no content-type'}`);
+    if (upstream.statusCode !== 200) {
+      let body = '';
+      upstream.on('data', (chunk) => { body += chunk.toString().slice(0, 200); });
+      upstream.on('end', () => { console.log(`[HDHR] Stream error body: ${body}`); res.status(upstream.statusCode || 500).end(); });
+      return;
+    }
     upstream.pipe(res);
     upstream.on('error', () => res.end());
-    upstream.on('end', () => res.end());
+    upstream.on('end', () => { console.log('[HDHR] Stream ended'); res.end(); });
   });
 
   request.on('error', (err) => {
