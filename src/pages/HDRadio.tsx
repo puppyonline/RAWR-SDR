@@ -49,6 +49,18 @@ function HDRadio() {
 
   useEffect(() => { audio.setVolume(volume); }, [volume, audio.setVolume]);
 
+  // Listen for metadata from nrsc5 via WebSocket
+  useEffect(() => {
+    audio.onRDS((data) => {
+      setMetadata((prev) => ({
+        station: data.ps || prev.station,
+        artist: data.artist || prev.artist,
+        title: data.title || prev.title,
+        genre: data.genre || prev.genre,
+      }));
+    });
+  }, [audio.onRDS]);
+
   useEffect(() => {
     if (power && !initialTune.current) {
       initialTune.current = true;
