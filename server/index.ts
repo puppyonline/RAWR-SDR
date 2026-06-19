@@ -155,8 +155,7 @@ app.post('/api/tune', async (req, res) => {
       args.push(
         '-M', 'am',
         '-f', `${frequency}k`,
-        '-s', '240k',           // 240kHz hardware rate (min for RTL-SDR is ~225k)
-        '-r', '48000',          // resample 240k -> 48k (clean 5:1 ratio)
+        '-s', '240k',           // 240kHz hardware rate
         '-l', '0',
         '-g', '0',
         '-E', 'direct',
@@ -168,7 +167,6 @@ app.post('/api/tune', async (req, res) => {
         '-M', 'am',
         '-f', `${frequency}M`,
         '-s', '240k',           // 240kHz hardware rate
-        '-r', '48000',          // resample 240k -> 48k (clean 5:1)
         '-l', String(squelch || 50),
         '-g', '0',
         '-p', '0',
@@ -258,13 +256,18 @@ app.post('/api/tune', async (req, res) => {
         }
       });
     } else {
-      // Non-FM modes or no redsea: just forward PCM directly
+      // Non-FM modes or no redsea: downsample from 240kHz to 48kHz in Node
+      // (Windows rtl_fm ignores the -r flag entirely)
+      const needsDownsample = (mode === 'am' || mode === 'atc');
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
-        wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(chunk);
-          }
-        });
+        const audioChunk = needsDownsample ? downsample(chunk, 240000, 48000) : chunk;
+        if (audioChunk.length > 0) {
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(audioChunk);
+            }
+          });
+        }
       });
     }
 
