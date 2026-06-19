@@ -302,15 +302,17 @@ app.post('/api/tune', async (req, res) => {
 
     } else if (mode === 'noaa') {
       // === NOAA Weather Radio: narrowband FM on 162.4-162.55 MHz ===
-      // E4000 handles this range perfectly. Use NFM demod with 12.5k bandwidth.
+      // NOAA uses narrowband FM with ~5kHz deviation (16kHz channel spacing).
+      // Use a lower sample rate for proper narrowband demod.
+      // E4000 gain 34 dB is good for the 162 MHz band.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'fm',
         '-f', `${frequency}M`,
-        '-s', '171k',
+        '-s', '48k',
+        '-g', '34',
         '-l', '0',
         '-E', 'deemp',
-        '-g', '34',
       ];
 
       console.log(`[RAWR-SDR] NOAA: ${rtlFm} ${args.join(' ')}`);
@@ -321,22 +323,9 @@ app.post('/api/tune', async (req, res) => {
         if (m) console.log(`[rtl_fm] ${m}`);
       });
 
-      // Downsample 171kHz -> 48kHz
+      // Output is already at 48kHz — send directly, no downsampling needed
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
-        const usable = chunk.length & ~1;
-        if (usable < 4) return;
-        const srcSamples = usable / 2;
-        const ratio = 171000 / 48000;
-        const dstSamples = Math.floor(srcSamples / ratio);
-        if (dstSamples < 1) return;
-
-        const output = Buffer.alloc(dstSamples * 2);
-        for (let i = 0; i < dstSamples; i++) {
-          const srcIdx = Math.min(Math.floor(i * ratio), srcSamples - 1);
-          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
-        }
-
-        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(chunk); });
       });
 
     } else {
