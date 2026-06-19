@@ -7,6 +7,7 @@ import hdhrRouter from './hdhr';
 import logosRouter from './logos';
 import newsRouter from './news';
 import recommendationsRouter from './recommendations';
+import metadataRouter from './metadata';
 
 const app = express();
 const PORT = 3001;
@@ -73,6 +74,9 @@ app.use('/api/news', newsRouter);
 
 // Recommendations / featured content endpoints
 app.use('/api/recommendations', recommendationsRouter);
+
+// Metadata enrichment (TVmaze, iTunes, Wikipedia, MusicBrainz, etc.)
+app.use('/api/metadata', metadataRouter);
 
 /**
  * Hybrid tuning approach:

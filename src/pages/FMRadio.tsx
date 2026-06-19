@@ -4,6 +4,7 @@ import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
 import StationLogo from '../components/StationLogo';
 import { useAudioStream } from '../hooks/useAudioStream';
+import { useNowPlayingMeta } from '../hooks/useMetadata';
 
 interface StationPreset {
   freq: number;
@@ -188,6 +189,15 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
   const hasRDS = Object.keys(rds).length > 0;
   const hasTrack = rds.artist || rds.title;
 
+  // Fetch rich metadata when we have artist/title from RDS
+  const meta = useNowPlayingMeta(
+    rds.artist || undefined,
+    rds.title || undefined,
+    preset?.label || undefined
+  );
+
+  const albumArt = meta?.track?.albumArtLarge || meta?.track?.albumArt;
+
   return (
     <div className="card p-0 overflow-hidden">
       {/* Now Playing header */}
@@ -214,22 +224,47 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
         </div>
       </div>
 
-      {/* Currently playing track/show */}
+      {/* Currently playing track with album art */}
       {hasRDS && (
         <div className="p-4 bg-radio/[0.02] border-b border-white/[0.04]">
           {hasTrack ? (
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-radio/10 border border-radio/20 flex items-center justify-center shrink-0">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-radio">
-                  <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                </svg>
-              </div>
+              {/* Album art or fallback icon */}
+              {albumArt ? (
+                <img
+                  src={albumArt}
+                  alt={meta?.track?.album || 'Album art'}
+                  className="w-14 h-14 rounded-lg object-cover shrink-0 shadow-lg"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-lg bg-radio/10 border border-radio/20 flex items-center justify-center shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-radio">
+                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                  </svg>
+                </div>
+              )}
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-zinc-500 uppercase tracking-wide">Now Playing</p>
+                <p className="text-2xs text-zinc-500 uppercase tracking-wide">Now Playing</p>
                 <p className="text-sm font-medium text-zinc-100 mt-0.5 truncate">{rds.title || 'Unknown Track'}</p>
                 {rds.artist && <p className="text-xs text-zinc-400 mt-0.5 truncate">{rds.artist}</p>}
+                {/* Album + genre from iTunes */}
+                {meta?.track && (
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {meta.track.album && (
+                      <span className="text-2xs text-zinc-500 truncate max-w-[12rem]">
+                        {meta.track.album}
+                      </span>
+                    )}
+                    {meta.track.genre && (
+                      <span className="badge bg-radio/10 text-radio text-2xs border border-radio/20">
+                        {meta.track.genre}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {rds.prog_type && (
+              {rds.prog_type && !meta?.track?.genre && (
                 <span className="badge bg-radio/10 text-radio text-2xs border border-radio/20 shrink-0">
                   {rds.prog_type}
                 </span>
@@ -246,6 +281,51 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
               <p className="text-sm text-zinc-200 font-medium">{rds.ps}</p>
             </div>
           ) : null}
+        </div>
+      )}
+
+      {/* Artist info from MusicBrainz + Wikipedia */}
+      {meta?.artistWiki && hasTrack && (
+        <div className="p-4 border-b border-white/[0.04]">
+          <div className="flex items-start gap-3">
+            {meta.artistWiki.thumbnail && (
+              <img
+                src={meta.artistWiki.thumbnail}
+                alt={meta.artistWiki.title}
+                className="w-10 h-10 rounded-full object-cover shrink-0"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-zinc-200">{meta.artistWiki.title}</p>
+                {meta.artist?.country && (
+                  <span className="text-2xs text-zinc-500">{meta.artist.country}</span>
+                )}
+              </div>
+              <p className="text-2xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+                {meta.artistWiki.extract}
+              </p>
+              {meta.artist?.genres && meta.artist.genres.length > 0 && (
+                <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                  {meta.artist.genres.slice(0, 4).map((g) => (
+                    <span key={g} className="text-2xs text-zinc-500 bg-white/[0.04] rounded px-1.5 py-0.5">
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Station Wikipedia blurb (when no track is playing) */}
+      {meta?.stationWiki && !hasTrack && (
+        <div className="p-4 border-b border-white/[0.04]">
+          <p className="text-2xs text-zinc-500 uppercase tracking-wide mb-1">About this station</p>
+          <p className="text-xs text-zinc-400 line-clamp-3 leading-relaxed">
+            {meta.stationWiki.extract}
+          </p>
         </div>
       )}
 

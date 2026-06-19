@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
+import { useTVShowInfo } from '../hooks/useMetadata';
 
 interface Channel {
   GuideNumber: string;
@@ -374,6 +375,9 @@ function NowPlayingTV({ channel, guide, network, onStop }: {
   const current = entries.find((e) => e.StartTime <= now && e.EndTime > now);
   const next = entries.find((e) => e.StartTime > now);
 
+  // Fetch rich show info from TVmaze
+  const showInfo = useTVShowInfo(current?.Title);
+
   // Calculate progress
   const progress = current
     ? Math.min(100, Math.round(((now - current.StartTime) / (current.EndTime - current.StartTime)) * 100))
@@ -408,23 +412,72 @@ function NowPlayingTV({ channel, guide, network, onStop }: {
             />
           </div>
 
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            {/* Show poster from TVmaze */}
+            {showInfo?.image && (
+              <img
+                src={showInfo.image}
+                alt={showInfo.name}
+                className="w-16 h-24 rounded-md object-cover shrink-0 shadow-lg"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+
             <div className="min-w-0 flex-1">
-              <h4 className="text-sm font-semibold text-zinc-100">{current.Title}</h4>
-              {current.EpisodeTitle && (
-                <p className="text-xs text-zinc-400 mt-0.5">"{current.EpisodeTitle}"</p>
-              )}
-              {current.Synopsis && (
-                <p className="text-xs text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">
-                  {current.Synopsis}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-semibold text-zinc-100">{current.Title}</h4>
+                  {current.EpisodeTitle && (
+                    <p className="text-xs text-zinc-400 mt-0.5">&ldquo;{current.EpisodeTitle}&rdquo;</p>
+                  )}
+                  {/* Genre tags + rating from TVmaze */}
+                  {showInfo && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {showInfo.rating && (
+                        <span className="flex items-center gap-0.5 text-2xs text-yellow-400">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                          {showInfo.rating}
+                        </span>
+                      )}
+                      {showInfo.genres.slice(0, 3).map((g) => (
+                        <span key={g} className="text-2xs text-zinc-500 bg-white/[0.04] rounded px-1.5 py-0.5">
+                          {g}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-mono text-zinc-300">{timeRemaining}m left</p>
+                  <p className="text-2xs text-zinc-600 mt-0.5">
+                    {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Show synopsis (prefer guide synopsis, fall back to TVmaze) */}
+              {(current.Synopsis || showInfo?.summary) && (
+                <p className="text-xs text-zinc-500 mt-2 line-clamp-2 leading-relaxed">
+                  {current.Synopsis || showInfo?.summary}
                 </p>
               )}
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-xs font-mono text-zinc-300">{timeRemaining}m left</p>
-              <p className="text-2xs text-zinc-600 mt-0.5">
-                {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
-              </p>
+
+              {/* Cast from TVmaze */}
+              {showInfo?.cast && showInfo.cast.length > 0 && (
+                <div className="flex items-center gap-2 mt-2.5">
+                  <span className="text-2xs text-zinc-600 shrink-0">Cast:</span>
+                  <div className="flex items-center gap-1.5 overflow-hidden">
+                    {showInfo.cast.slice(0, 4).map((c) => (
+                      <div key={c.name} className="flex items-center gap-1 shrink-0">
+                        {c.image && (
+                          <img src={c.image} alt={c.name} className="w-4 h-4 rounded-full object-cover" />
+                        )}
+                        <span className="text-2xs text-zinc-400 truncate max-w-[5rem]">{c.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
