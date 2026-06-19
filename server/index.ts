@@ -267,15 +267,17 @@ app.post('/api/tune', async (req, res) => {
       });
 
     } else if (mode === 'atc') {
-      // === ATC: rtl_fm works fine for VHF AM (118-137 MHz, no direct sampling) ===
-      // Same approach as FM: run at 171k, downsample in Node
+      // === ATC: AM demod on VHF airband (118-137 MHz) ===
+      // Aviation uses AM with 8.33/25 kHz channel spacing.
+      // E4000 is very sensitive in VHF — lower gain to avoid overload.
+      // Use 12.5k output rate for narrow AM, then upsample to 48k.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'am',
         '-f', `${frequency}M`,
-        '-s', '171k',
+        '-s', '48k',
         '-l', '0',
-        '-g', '42',
+        '-g', '21',
       ];
 
       console.log(`[RAWR-SDR] ATC: ${rtlFm} ${args.join(' ')}`);
@@ -286,22 +288,9 @@ app.post('/api/tune', async (req, res) => {
         if (m) console.log(`[rtl_fm] ${m}`);
       });
 
-      // Downsample 171kHz -> 48kHz
+      // Output is at 48kHz — send directly
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
-        const usable = chunk.length & ~1;
-        if (usable < 4) return;
-        const srcSamples = usable / 2;
-        const ratio = 171000 / 48000;
-        const dstSamples = Math.floor(srcSamples / ratio);
-        if (dstSamples < 1) return;
-
-        const output = Buffer.alloc(dstSamples * 2);
-        for (let i = 0; i < dstSamples; i++) {
-          const srcIdx = Math.min(Math.floor(i * ratio), srcSamples - 1);
-          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
-        }
-
-        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(chunk); });
       });
 
     } else if (mode === 'noaa') {
