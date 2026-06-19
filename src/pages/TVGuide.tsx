@@ -32,7 +32,13 @@ function TVGuide() {
       const res = await fetch('/api/hdhr/guide');
       if (res.ok) {
         const data = await res.json();
-        setGuide(data);
+        // Filter out ATSC 3.0 (channel numbers >= 100) and DRM channels
+        const filtered = data.filter((ch: any) => {
+          const num = parseFloat(ch.GuideNumber);
+          if (num >= 100) return false;
+          return true;
+        });
+        setGuide(filtered);
       }
     } catch { /* ignore */ }
     setLoading(false);

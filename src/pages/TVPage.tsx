@@ -66,7 +66,17 @@ function TVPage() {
       const res = await fetch('/api/hdhr/lineup');
       if (!res.ok) throw new Error('Failed to get lineup');
       const data = await res.json();
-      setChannels(data);
+      // Filter out ATSC 3.0 channels (virtual channel numbers >= 100 are typically 3.0)
+      // Also filter channels tagged with DRM
+      const filtered = data.filter((ch: any) => {
+        const num = parseFloat(ch.GuideNumber);
+        // ATSC 3.0 channels are typically numbered 100+ in Phoenix market
+        if (num >= 100) return false;
+        // Skip DRM-tagged channels
+        if (ch.DRM) return false;
+        return true;
+      });
+      setChannels(filtered);
     } catch (err: any) {
       setError(err.message);
     }
