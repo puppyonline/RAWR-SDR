@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
+import StationLogo from '../components/StationLogo';
+import StationInfo from '../components/StationInfo';
 import { useAudioStream } from '../hooks/useAudioStream';
 
 const presets = [
@@ -130,6 +132,21 @@ function FMRadio() {
         </div>
       )}
 
+      {/* Station info */}
+      {power && (
+        <StationInfo
+          callsign={presets.find(p => p.freq === frequency)?.label || `${frequency} FM`}
+          frequency={frequency}
+          format={presets.find(p => p.freq === frequency)?.format || 'FM Broadcast'}
+          unit="MHz"
+          accentColor="#8b5cf6"
+          details={{
+            city: 'Phoenix, AZ',
+            slogan: rds.ps || undefined,
+          }}
+        />
+      )}
+
       {/* Meters */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
         <div className="lg:col-span-3 card p-4">
@@ -149,18 +166,20 @@ function FMRadio() {
       {/* Presets */}
       <div className="card p-4">
         <span className="label text-radio">Mesa / Phoenix Presets</span>
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 mt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 mt-2">
           {presets.map((p) => (
             <button
               key={p.freq}
               onClick={() => setFrequency(p.freq)}
-              className={`card-inner py-2 px-1.5 text-center transition-all hover:border-radio/30 ${
+              className={`card-inner py-2 px-2 text-left transition-all hover:border-radio/30 flex items-center gap-2 ${
                 frequency === p.freq ? 'border-radio/40 bg-radio/5' : ''
               }`}
             >
-              <div className="text-2xs text-zinc-500 truncate">{p.label}</div>
-              <div className="text-xs font-mono font-medium text-zinc-200">{p.freq}</div>
-              <div className="text-2xs text-zinc-600 truncate">{p.format}</div>
+              <StationLogo callsign={p.label} size={28} fallbackColor="#8b5cf6" />
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-zinc-200 truncate">{p.label}</div>
+                <div className="text-2xs text-zinc-500">{p.freq} &middot; {p.format}</div>
+              </div>
             </button>
           ))}
         </div>

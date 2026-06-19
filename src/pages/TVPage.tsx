@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { tvNetworkLogos } from '../hooks/useStationLogos';
 
 interface Channel {
   GuideNumber: string;
@@ -22,15 +23,16 @@ interface GuideChannel {
 }
 
 // Phoenix OTA channel metadata
-const channelMeta: Record<string, { network: string; color: string }> = {
+const channelMeta: Record<string, { network: string; color: string; logo?: string }> = {
   '3': { network: 'IND', color: '#6366f1' },
-  '5': { network: 'CBS', color: '#2563eb' },
-  '7': { network: 'CW', color: '#16a34a' },
-  '8': { network: 'PBS', color: '#0891b2' },
-  '10': { network: 'NBC', color: '#f59e0b' },
-  '12': { network: 'NBC', color: '#f59e0b' },
-  '15': { network: 'ABC', color: '#000000' },
-  '45': { network: 'Uni', color: '#dc2626' },
+  '5': { network: 'CBS', color: '#2563eb', logo: tvNetworkLogos['CBS'] },
+  '7': { network: 'CW', color: '#16a34a', logo: tvNetworkLogos['CW'] },
+  '8': { network: 'PBS', color: '#0891b2', logo: tvNetworkLogos['PBS'] },
+  '10': { network: 'NBC', color: '#f59e0b', logo: tvNetworkLogos['NBC'] },
+  '12': { network: 'NBC', color: '#f59e0b', logo: tvNetworkLogos['NBC'] },
+  '15': { network: 'ABC', color: '#000000', logo: tvNetworkLogos['ABC'] },
+  '33': { network: 'FOX', color: '#1d4ed8', logo: tvNetworkLogos['FOX'] },
+  '45': { network: 'Uni', color: '#dc2626', logo: tvNetworkLogos['Univision'] },
   '61': { network: 'IND', color: '#6366f1' },
 };
 
@@ -217,11 +219,13 @@ function TVPage() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    {meta && (
+                    {meta?.logo ? (
+                      <img src={meta.logo} alt={meta.network} className="w-5 h-5 object-contain rounded-sm" loading="lazy" />
+                    ) : meta ? (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase" style={{ backgroundColor: `${meta.color}30`, color: meta.color }}>
                         {meta.network}
                       </span>
-                    )}
+                    ) : null}
                     <span className="text-xs font-mono text-zinc-400 w-8">{ch.GuideNumber}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{ch.GuideName}</div>
