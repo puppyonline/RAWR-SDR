@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
 import { useTVShowInfo } from '../hooks/useMetadata';
 
@@ -240,55 +240,18 @@ function TVPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Video Player */}
+        {/* Video Player with Overlay */}
         <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col">
-          <div className="relative aspect-video bg-black flex items-center justify-center">
-            <video
-              ref={videoRef}
-              className="w-full h-full"
-              autoPlay
-              muted={false}
-              controls
-            />
-            {!isPlaying && !isBuffering && (
-              <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
-                <div className="text-center">
-                  <div className="text-4xl mb-2 opacity-30">📺</div>
-                  <p className="text-sm text-zinc-500">Select a channel to start watching</p>
-                </div>
-              </div>
-            )}
-            {isBuffering && (
-              <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
-                <div className="text-center space-y-4">
-                  {/* Animated signal bars */}
-                  <div className="flex items-end justify-center gap-1 h-10">
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_0ms]" style={{ height: '40%' }} />
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_150ms]" style={{ height: '60%' }} />
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_300ms]" style={{ height: '80%' }} />
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_450ms]" style={{ height: '100%' }} />
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_600ms]" style={{ height: '80%' }} />
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_750ms]" style={{ height: '60%' }} />
-                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_900ms]" style={{ height: '40%' }} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-zinc-200">Tuning to {selectedChannel?.GuideName}</p>
-                    <p className="text-xs text-zinc-400 mt-1.5 italic">{loadingBlurb}</p>
-                    <p className="text-2xs text-zinc-600 mt-3">This can take up to 10 seconds</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          {/* Now playing panel (enhanced) */}
-          {selectedChannel && (
-            <NowPlayingTV
-              channel={selectedChannel}
-              guide={guide}
-              network={channelMeta[selectedChannel.GuideNumber.split('.')[0]]?.network}
-              onStop={stopPlayback}
-            />
-          )}
+          <VideoPlayerWithOverlay
+            videoRef={videoRef}
+            isPlaying={isPlaying}
+            isBuffering={isBuffering}
+            selectedChannel={selectedChannel}
+            guide={guide}
+            channelMeta={channelMeta}
+            loadingBlurb={loadingBlurb}
+            onStop={stopPlayback}
+          />
         </div>
 
         {/* Channel List */}
@@ -353,29 +316,33 @@ function TVPage() {
   );
 }
 
-// ─── Now Playing TV Panel ────────────────────────────────────────────────────
+// ─── Video Player with Custom Overlay ────────────────────────────────────────
 
-function NowPlayingTV({ channel, guide, network, onStop }: {
-  channel: Channel;
+function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
+  videoRef: React.RefObject<HTMLVideoElement>;
+  isPlaying: boolean;
+  isBuffering: boolean;
+  selectedChannel: Channel | null;
   guide: GuideChannel[];
-  network?: string;
+  channelMeta: Record<string, { network: string; color: string; logo?: string }>;
+  loadingBlurb: string;
   onStop: () => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setTick] = useState(0);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Re-render every 30s to keep time remaining accurate
-  useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
+  // Get current show info
   const now = Math.floor(Date.now() / 1000);
-  const guideChannel = guide.find((g) => g.GuideNumber === channel.GuideNumber);
+  const guideChannel = selectedChannel ? guide.find((g) => g.GuideNumber === selectedChannel.GuideNumber) : null;
   const entries = guideChannel?.Guide || [];
   const current = entries.find((e) => e.StartTime <= now && e.EndTime > now);
   const next = entries.find((e) => e.StartTime > now);
+  const network = selectedChannel ? channelMeta[selectedChannel.GuideNumber.split('.')[0]]?.network : undefined;
 
-  // Fetch rich show info from TVmaze
+  // Fetch TVmaze show info
   const showInfo = useTVShowInfo(current?.Title);
 
   // Calculate progress
@@ -387,112 +354,214 @@ function NowPlayingTV({ channel, guide, network, onStop }: {
   const formatTime = (epoch: number) =>
     new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+  // Re-render every 30s for time updates
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Show overlay on mouse move / tap, auto-hide after 4s
+  const revealOverlay = useCallback(() => {
+    if (!isPlaying) return;
+    setShowOverlay(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setShowOverlay(false), 4000);
+  }, [isPlaying]);
+
+  // Track fullscreen state
+  useEffect(() => {
+    const onFSChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFSChange);
+    return () => document.removeEventListener('fullscreenchange', onFSChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      containerRef.current.requestFullscreen();
+    }
+  };
+
+  // Toggle play/pause
+  const togglePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) video.play();
+    else video.pause();
+  };
+
   return (
-    <div className="border-t border-white/[0.06]">
-      {/* Channel header + stop button */}
-      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="text-sm font-mono font-bold text-tv">{channel.GuideNumber}</span>
-          <span className="text-sm font-semibold text-zinc-100">{channel.GuideName}</span>
-          {network && (
-            <span className="badge bg-tv/10 text-tv text-2xs border border-tv/20">{network}</span>
-          )}
-        </div>
-        <button onClick={onStop} className="btn-danger text-xs">Stop</button>
-      </div>
+    <div
+      ref={containerRef}
+      className={`relative bg-black flex items-center justify-center ${isFullscreen ? 'w-screen h-screen' : 'aspect-video'}`}
+      onMouseMove={revealOverlay}
+      onMouseEnter={revealOverlay}
+      onClick={revealOverlay}
+    >
+      <video
+        ref={videoRef}
+        className="w-full h-full"
+        autoPlay
+        muted={false}
+      />
 
-      {/* Current program info */}
-      {current ? (
-        <div className="px-4 pb-4">
-          {/* Progress bar */}
-          <div className="h-1 bg-bg-raised rounded-full overflow-hidden mb-3">
-            <div
-              className="h-full bg-tv/70 rounded-full transition-all duration-1000"
-              style={{ width: `${progress}%` }}
-            />
+      {/* Idle state */}
+      {!isPlaying && !isBuffering && !selectedChannel && (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
+          <div className="text-center">
+            <div className="text-4xl mb-2 opacity-30">📺</div>
+            <p className="text-sm text-zinc-500">Select a channel to start watching</p>
           </div>
+        </div>
+      )}
 
-          <div className="flex items-start gap-4">
-            {/* Show poster from TVmaze */}
-            {showInfo?.image && (
-              <img
-                src={showInfo.image}
-                alt={showInfo.name}
-                className="w-16 h-24 rounded-md object-cover shrink-0 shadow-lg"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            )}
+      {/* Buffering state */}
+      {isBuffering && (
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
+          <div className="text-center space-y-4">
+            <div className="flex items-end justify-center gap-1 h-10">
+              {[0, 150, 300, 450, 600, 750, 900].map((delay, i) => (
+                <div key={i} className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite]"
+                  style={{ height: `${40 + (i < 4 ? i * 20 : (6 - i) * 20)}%`, animationDelay: `${delay}ms` }} />
+              ))}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Tuning to {selectedChannel?.GuideName}</p>
+              <p className="text-xs text-zinc-400 mt-1.5 italic">{loadingBlurb}</p>
+              <p className="text-2xs text-zinc-600 mt-3">This can take up to 10 seconds</p>
+            </div>
+          </div>
+        </div>
+      )}
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-sm font-semibold text-zinc-100">{current.Title}</h4>
-                  {current.EpisodeTitle && (
-                    <p className="text-xs text-zinc-400 mt-0.5">&ldquo;{current.EpisodeTitle}&rdquo;</p>
+      {/* ─── Custom Overlay (shows on hover/tap) ─────────────────────── */}
+      {isPlaying && selectedChannel && (
+        <div
+          className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-300 pointer-events-none ${
+            showOverlay ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          {/* Top bar: channel info + show metadata */}
+          <div className="bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 pointer-events-auto">
+            <div className="flex items-start gap-3">
+              {/* Show poster */}
+              {showInfo?.image && (
+                <img
+                  src={showInfo.image}
+                  alt={showInfo.name}
+                  className="w-10 h-14 rounded object-cover shrink-0 shadow-lg hidden sm:block"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
+                  <span className="text-sm font-semibold text-white">{selectedChannel.GuideName}</span>
+                  {network && (
+                    <span className="badge bg-white/10 text-white/80 text-2xs border border-white/20">{network}</span>
                   )}
-                  {/* Genre tags + rating from TVmaze */}
-                  {showInfo && (
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {showInfo.rating && (
+                </div>
+                {current && (
+                  <div className="mt-1">
+                    <p className="text-sm text-white/90 font-medium truncate">{current.Title}</p>
+                    {current.EpisodeTitle && (
+                      <p className="text-xs text-white/60 truncate">&ldquo;{current.EpisodeTitle}&rdquo;</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {showInfo?.rating && (
                         <span className="flex items-center gap-0.5 text-2xs text-yellow-400">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                           {showInfo.rating}
                         </span>
                       )}
-                      {showInfo.genres.slice(0, 3).map((g) => (
-                        <span key={g} className="text-2xs text-zinc-500 bg-white/[0.04] rounded px-1.5 py-0.5">
-                          {g}
-                        </span>
+                      {showInfo?.genres.slice(0, 2).map((g) => (
+                        <span key={g} className="text-2xs text-white/50 bg-white/10 rounded px-1.5 py-0.5">{g}</span>
                       ))}
+                      {current.Synopsis && (
+                        <span className="text-2xs text-white/40 truncate hidden md:inline">{current.Synopsis.slice(0, 80)}...</span>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs font-mono text-zinc-300">{timeRemaining}m left</p>
-                  <p className="text-2xs text-zinc-600 mt-0.5">
-                    {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Show synopsis (prefer guide synopsis, fall back to TVmaze) */}
-              {(current.Synopsis || showInfo?.summary) && (
-                <p className="text-xs text-zinc-500 mt-2 line-clamp-2 leading-relaxed">
-                  {current.Synopsis || showInfo?.summary}
-                </p>
-              )}
-
-              {/* Cast from TVmaze */}
-              {showInfo?.cast && showInfo.cast.length > 0 && (
-                <div className="flex items-center gap-2 mt-2.5">
-                  <span className="text-2xs text-zinc-600 shrink-0">Cast:</span>
-                  <div className="flex items-center gap-1.5 overflow-hidden">
-                    {showInfo.cast.slice(0, 4).map((c) => (
-                      <div key={c.name} className="flex items-center gap-1 shrink-0">
-                        {c.image && (
-                          <img src={c.image} alt={c.name} className="w-4 h-4 rounded-full object-cover" />
-                        )}
-                        <span className="text-2xs text-zinc-400 truncate max-w-[5rem]">{c.name}</span>
-                      </div>
-                    ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Up next */}
-          {next && (
-            <div className="mt-3 pt-2.5 border-t border-white/[0.04] flex items-center gap-2">
-              <span className="text-2xs text-zinc-600 uppercase tracking-wide">Up Next</span>
-              <span className="text-xs text-zinc-400 truncate">{next.Title}</span>
-              <span className="text-2xs text-zinc-600 shrink-0">{formatTime(next.StartTime)}</span>
+          {/* Center: play/pause on click */}
+          <div className="flex-1" />
+
+          {/* Bottom bar: progress + controls */}
+          <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 pointer-events-auto">
+            {/* Cast row */}
+            {showInfo?.cast && showInfo.cast.length > 0 && (
+              <div className="flex items-center gap-2 mb-2.5 hidden sm:flex">
+                {showInfo.cast.slice(0, 5).map((c) => (
+                  <div key={c.name} className="flex items-center gap-1">
+                    {c.image && <img src={c.image} alt={c.name} className="w-5 h-5 rounded-full object-cover" />}
+                    <span className="text-2xs text-white/50">{c.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Progress bar */}
+            {current && (
+              <div className="h-1 bg-white/20 rounded-full overflow-hidden mb-3 cursor-pointer">
+                <div
+                  className="h-full bg-tv rounded-full transition-all duration-1000"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            )}
+
+            {/* Controls row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {/* Play/Pause */}
+                <button onClick={togglePlayPause} className="text-white/80 hover:text-white transition-colors">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    {videoRef.current?.paused
+                      ? <path d="M8 5v14l11-7z"/>
+                      : <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>
+                    }
+                  </svg>
+                </button>
+                {/* Stop */}
+                <button onClick={onStop} className="text-white/60 hover:text-red-400 transition-colors">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                </button>
+                {/* Time */}
+                {current && (
+                  <span className="text-xs text-white/60 font-mono">
+                    {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
+                    <span className="text-white/40 ml-2">{timeRemaining}m left</span>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Up next badge */}
+                {next && (
+                  <span className="text-2xs text-white/40 hidden sm:inline">
+                    Next: {next.Title} at {formatTime(next.StartTime)}
+                  </span>
+                )}
+                {/* Fullscreen */}
+                <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    {isFullscreen ? (
+                      <><path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/></>
+                    ) : (
+                      <><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></>
+                    )}
+                  </svg>
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="px-4 pb-3">
-          <p className="text-xs text-zinc-500">No program info available</p>
+          </div>
         </div>
       )}
     </div>
