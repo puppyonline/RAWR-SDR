@@ -18,6 +18,18 @@ import { Router, Request, Response } from 'express';
 import http from 'http';
 import https from 'https';
 import { spawn } from 'child_process';
+import { createRequire } from 'module';
+
+// Get ffmpeg binary path from ffmpeg-static package
+const require = createRequire(import.meta.url);
+let ffmpegPath: string;
+try {
+  ffmpegPath = require('ffmpeg-static');
+  console.log(`[HDHR] ffmpeg: ${ffmpegPath}`);
+} catch {
+  ffmpegPath = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  console.log(`[HDHR] ffmpeg-static not found, falling back to PATH: ${ffmpegPath}`);
+}
 
 const router = Router();
 
@@ -153,10 +165,7 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
 
   // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
-  const isWin = process.platform === 'win32';
-  const ffmpegCmd = isWin ? 'ffmpeg.exe' : 'ffmpeg';
-
-  const ffmpeg = spawn(ffmpegCmd, [
+  const ffmpeg = spawn(ffmpegPath, [
     '-i', streamUrl,
     '-c:v', 'libx264',        // H.264 video (browser compatible)
     '-preset', 'veryfast',     // low latency encoding
