@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -20,17 +20,26 @@ function FMRadio() {
   const [volume, setVolume] = useState(80);
   const [signalStrength, setSignalStrength] = useState(0);
   const audio = useAudioStream();
+  const retuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     audio.setVolume(volume);
   }, [volume, audio.setVolume]);
 
+  // Retune the SDR when frequency changes while playing (debounced 300ms)
+  useEffect(() => {
+    if (!audio.isPlaying) return;
+    if (retuneTimer.current) clearTimeout(retuneTimer.current);
+    retuneTimer.current = setTimeout(() => {
+      audio.retune(frequency, 'fm');
+      setSignalStrength(Math.floor(Math.random() * 30) + 55);
+    }, 300);
+    return () => { if (retuneTimer.current) clearTimeout(retuneTimer.current); };
+  }, [frequency, audio.isPlaying, audio.retune]);
+
   const handleTune = useCallback((freq: number) => {
     setFrequency(Number(freq.toFixed(1)));
-    if (audio.isPlaying) {
-      setSignalStrength(Math.floor(Math.random() * 30) + 55);
-    }
-  }, [audio.isPlaying]);
+  }, []);
 
   const togglePlay = async () => {
     if (audio.isPlaying) {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -16,10 +16,21 @@ function HDRadio() {
     genre: '---',
   });
   const audio = useAudioStream();
+  const retuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Live retune while playing
+  useEffect(() => {
+    if (!audio.isPlaying) return;
+    if (retuneTimer.current) clearTimeout(retuneTimer.current);
+    retuneTimer.current = setTimeout(() => {
+      audio.retune(frequency, 'hd');
+      setSignalStrength(Math.floor(Math.random() * 30) + 50);
+    }, 300);
+    return () => { if (retuneTimer.current) clearTimeout(retuneTimer.current); };
+  }, [frequency, audio.isPlaying, audio.retune]);
 
   const handleTune = useCallback((freq: number) => {
     setFrequency(freq);
-    setSignalStrength(Math.floor(Math.random() * 40) + 40);
     setMetadata({
       station: `HD${hdChannel} ${freq.toFixed(1)}`,
       artist: 'Acquiring...',

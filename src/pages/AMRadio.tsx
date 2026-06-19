@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -20,18 +20,26 @@ function AMRadio() {
   const [volume, setVolume] = useState(70);
   const [signalStrength, setSignalStrength] = useState(0);
   const audio = useAudioStream();
+  const retuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep gain node in sync with volume slider
   useEffect(() => {
     audio.setVolume(volume);
   }, [volume, audio.setVolume]);
 
+  // Live retune while playing (debounced 400ms for AM since restart is heavier)
+  useEffect(() => {
+    if (!audio.isPlaying) return;
+    if (retuneTimer.current) clearTimeout(retuneTimer.current);
+    retuneTimer.current = setTimeout(() => {
+      audio.retune(frequency, 'am');
+      setSignalStrength(Math.floor(Math.random() * 30) + 40);
+    }, 400);
+    return () => { if (retuneTimer.current) clearTimeout(retuneTimer.current); };
+  }, [frequency, audio.isPlaying, audio.retune]);
+
   const handleTune = useCallback((freq: number) => {
     setFrequency(Math.round(freq));
-    if (audio.isPlaying) {
-      setSignalStrength(Math.floor(Math.random() * 30) + 40);
-    }
-  }, [audio.isPlaying]);
+  }, []);
 
   const togglePlay = async () => {
     if (audio.isPlaying) {
@@ -105,9 +113,8 @@ function AMRadio() {
 
       <div className="card p-4 bg-amber-500/5 border-amber-500/10">
         <p className="text-xs text-amber-300/70">
-          <strong>Note:</strong> AM reception uses direct sampling mode (-E direct).
-          Your RTL-SDR must support Q-branch direct sampling (RTL-SDR Blog V3 or modified dongle).
-          Connect antenna to the HF input if available.
+          <strong>Note:</strong> AM uses direct sampling (-E direct) bypassing the tuner chip.
+          Requires RTL-SDR Blog V3 or modified dongle. Use the HF antenna input if available.
         </p>
       </div>
 
