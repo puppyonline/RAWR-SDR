@@ -291,11 +291,12 @@ function TVPage() {
         </div>
 
         {/* Channel List */}
-        <div className="card p-0 overflow-hidden flex flex-col lg:self-stretch max-h-[28rem] lg:max-h-none">
-          <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-bg-card z-10 shrink-0">
-            <span className="label">Channels ({channels.length})</span>
-          </div>
-          <div className="divide-y divide-white/[0.04] overflow-y-auto flex-1 min-h-0">
+        <div className="relative max-h-[28rem] lg:max-h-none">
+          <div className="lg:absolute lg:inset-0 card p-0 overflow-hidden flex flex-col">
+            <div className="p-3 border-b border-white/[0.06] bg-bg-card z-10 shrink-0">
+              <span className="label">Channels ({channels.length})</span>
+            </div>
+            <div className="divide-y divide-white/[0.04] overflow-y-auto flex-1 min-h-0">
             {channels.map((ch) => {
               const program = getCurrentProgram(ch.GuideNumber);
               const meta = channelMeta[ch.GuideNumber.split('.')[0]];
@@ -342,6 +343,7 @@ function TVPage() {
                 {hdhrStatus?.connected ? 'Loading channels...' : 'No HDHomeRun detected on network'}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>
