@@ -1,8 +1,27 @@
 import { Link } from 'react-router-dom';
 import { useSDRStatus } from '../hooks/useSDRStatus';
+import { useState, useEffect } from 'react';
+
+interface NewsItem {
+  title: string;
+  link: string;
+  description: string;
+  pubDate: string;
+  source: string;
+  category?: string;
+  image?: string;
+}
 
 function Dashboard() {
   const status = useSDRStatus();
+  const [news, setNews] = useState<NewsItem[]>([]);
+
+  useEffect(() => {
+    fetch('/api/news')
+      .then((r) => r.ok ? r.json() : [])
+      .then(setNews)
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -93,6 +112,44 @@ function Dashboard() {
         </div>
       </div>
 
+      {/* Local News */}
+      {news.length > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-zinc-200">Local News &amp; Entertainment</h3>
+            <span className="text-2xs text-zinc-500">Phoenix / Mesa</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {news.slice(0, 6).map((item, i) => (
+              <a
+                key={i}
+                href={item.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="card-inner p-3 hover:border-brand/20 transition-colors group flex gap-3"
+              >
+                {item.image && (
+                  <img src={item.image} alt="" className="w-16 h-12 object-cover rounded shrink-0" loading="lazy" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-zinc-200 group-hover:text-brand-bright transition-colors line-clamp-2">
+                    {item.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-2xs text-zinc-500">{item.source}</span>
+                    {item.pubDate && (
+                      <span className="text-2xs text-zinc-600">
+                        {timeAgo(item.pubDate)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* About section */}
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-zinc-200 mb-3">About Airwave</h3>
@@ -172,6 +229,17 @@ function RadarIcon() {
 }
 function AMIcon() {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12c0 0 3-8 10-8s10 8 10 8"/><path d="M5 12c0 0 2-5 7-5s7 5 7 5"/><circle cx="12" cy="12" r="2"/></svg>;
+}
+
+function timeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 export default Dashboard;

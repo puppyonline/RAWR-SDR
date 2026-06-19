@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, ChildProcess, execSync } from 'child_process';
 import hdhrRouter from './hdhr';
 import logosRouter from './logos';
+import newsRouter from './news';
 
 const app = express();
 const PORT = 3001;
@@ -65,6 +66,9 @@ app.use('/api/hdhr', hdhrRouter);
 
 // Station logo/branding endpoints
 app.use('/api/logos', logosRouter);
+
+// Local news endpoints
+app.use('/api/news', newsRouter);
 
 /**
  * Hybrid tuning approach:
