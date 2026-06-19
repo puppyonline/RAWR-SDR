@@ -183,7 +183,7 @@ app.post('/api/tune', async (req, res) => {
         stderrBuffer = lines.pop() || '';
 
         for (const line of lines) {
-          const trimmed = line.replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[\s|]*/, '').trim();
+          const trimmed = line.replace(/^(\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}[\s|]*/, '').trim();
           if (trimmed.startsWith('Title:')) currentRDS.title = trimmed.slice(7).trim();
           else if (trimmed.startsWith('Artist:')) currentRDS.artist = trimmed.slice(8).trim();
           else if (trimmed.startsWith('Album:')) currentRDS.album = trimmed.slice(7).trim();
