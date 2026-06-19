@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
 import { useTVShowInfo } from '../hooks/useMetadata';
+import { useTVPlayer } from '../hooks/useTVPlayer';
 
 interface Channel {
   GuideNumber: string;
@@ -40,57 +41,15 @@ const channelMeta: Record<string, { network: string; color: string; logo?: strin
 function TVPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [guide, setGuide] = useState<GuideChannel[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [loadingBlurb, setLoadingBlurb] = useState('');
   const [hdhrStatus, setHdhrStatus] = useState<any>(null);
-  const [error, setError] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const playerRef = useRef<any>(null);
+  const [localError, setLocalError] = useState('');
 
-  const loadingBlurbs = [
-    'Waking up the hamsters that power the antenna...',
-    'Convincing electrons to flow in the right direction...',
-    'Translating ancient MPEG-2 hieroglyphics...',
-    'Politely asking ffmpeg to hurry up...',
-    'Adjusting the rabbit ears for optimal reception...',
-    'Negotiating with the airwaves...',
-    'Converting photons to pixels...',
-    'Warming up the cathode ray tubes...',
-    'Untangling the electromagnetic spectrum...',
-    'Teaching 1s and 0s to become pictures...',
-    'Bribing the signal gods for better reception...',
-    'Decoding the mysteries of broadcast television...',
-    'Performing ancient TV rituals...',
-    'Spinning up the transcode hamster wheel...',
-    'Channeling our inner antenna...',
-    'Hold tight, we\'re surfing the airwaves...',
-    'Almost there... probably...',
-    'Making the magic happen behind the scenes...',
-    'Herding radio waves into your browser...',
-    'Asking the HDHomeRun nicely for some video...',
-    'Reticulating splines... wait, wrong loading screen...',
-    'Buffering at the speed of light (minus a few seconds)...',
-    'Fun fact: TV signals travel at 186,000 miles per second...',
-    'Converting over-the-air freedom into browser content...',
-    'Crunching pixels fresh from the antenna...',
-  ];
+  const { state, videoRef, tuneChannel, stopPlayback } = useTVPlayer();
+  const { selectedChannel, isPlaying, isBuffering, error, loadingBlurb } = state;
 
-  // Cycle through blurbs while buffering
-  useEffect(() => {
-    if (!isBuffering) return;
-    setLoadingBlurb(loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)]);
-    const interval = setInterval(() => {
-      setLoadingBlurb(loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)]);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isBuffering]);
-
-  // Fetch lineup and status on mount (with retry for slow HDHR discovery)
+  // Fetch lineup and status on mount
   useEffect(() => {
     const init = async () => {
-      // Give server a moment to finish pre-fetch discovery
       await new Promise((r) => setTimeout(r, 300));
       await fetchStatus();
       await fetchLineup();
@@ -104,7 +63,6 @@ function TVPage() {
       const res = await fetch('/api/hdhr/status');
       const data = await res.json();
       setHdhrStatus(data);
-      // Retry once if not connected (discovery may still be in progress)
       if (!data?.connected) {
         setTimeout(async () => {
           const retry = await fetch('/api/hdhr/status');
@@ -120,19 +78,15 @@ function TVPage() {
       const res = await fetch('/api/hdhr/lineup');
       if (!res.ok) throw new Error('Failed to get lineup');
       const data = await res.json();
-      // Filter out ATSC 3.0 channels (virtual channel numbers >= 100 are typically 3.0)
-      // Also filter channels tagged with DRM
       const filtered = data.filter((ch: any) => {
         const num = parseFloat(ch.GuideNumber);
-        // ATSC 3.0 channels are typically numbered 100+ in Phoenix market
         if (num >= 100) return false;
-        // Skip DRM-tagged channels
         if (ch.DRM) return false;
         return true;
       });
       setChannels(filtered);
     } catch (err: any) {
-      setError(err.message);
+      setLocalError(err.message);
     }
   };
 
@@ -145,68 +99,6 @@ function TVPage() {
     } catch { /* guide is optional */ }
   };
 
-  const tuneChannel = async (channel: Channel) => {
-    // Stop current playback
-    if (playerRef.current) {
-      playerRef.current.destroy();
-      playerRef.current = null;
-    }
-    setIsPlaying(false);
-    setIsBuffering(true);
-    setError('');
-    setSelectedChannel(channel);
-
-    // Start mpegts.js player
-    const mpegts = await import('mpegts.js');
-    if (!mpegts.default.isSupported()) {
-      setError('MPEG-TS playback not supported in this browser');
-      setIsBuffering(false);
-      return;
-    }
-
-    const video = videoRef.current;
-    if (!video) { setIsBuffering(false); return; }
-
-    // Clear buffering when video actually starts playing
-    video.onplaying = () => { setIsBuffering(false); setIsPlaying(true); };
-    video.onwaiting = () => { setIsBuffering(true); };
-
-    const player = mpegts.default.createPlayer({
-      type: 'mpegts',
-      isLive: true,
-      url: `${window.location.origin}/api/hdhr/stream/${channel.GuideNumber}`,
-    }, {
-      enableWorker: true,
-      liveBufferLatencyChasing: true,
-      liveBufferLatencyMaxLatency: 3,
-      liveBufferLatencyMinRemain: 0.5,
-    });
-
-    player.attachMediaElement(video);
-    player.load();
-    player.play();
-    playerRef.current = player;
-    setError('');
-
-    // Handle stream errors (e.g. ATSC 3.0 channels returning 503)
-    player.on('error', () => {
-      setError('Channel unavailable — may be an ATSC 3.0/DRM channel requiring DVR subscription');
-      setIsPlaying(false);
-      setIsBuffering(false);
-    });
-  };
-
-  const stopPlayback = () => {
-    if (playerRef.current) {
-      playerRef.current.destroy();
-      playerRef.current = null;
-    }
-    setIsPlaying(false);
-    setIsBuffering(false);
-    setSelectedChannel(null);
-  };
-
-  // Get current program for a channel from guide data
   const getCurrentProgram = (guideNumber: string): GuideEntry | null => {
     const now = Math.floor(Date.now() / 1000);
     const ch = guide.find((g) => g.GuideNumber === guideNumber);
@@ -214,12 +106,7 @@ function TVPage() {
     return ch.Guide.find((p) => p.StartTime <= now && p.EndTime > now) || null;
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (playerRef.current) playerRef.current.destroy();
-    };
-  }, []);
+  const displayError = error || localError;
 
   return (
     <div className="space-y-3">
@@ -231,7 +118,7 @@ function TVPage() {
             <p className="text-xs text-zinc-500 font-mono mt-0.5">HDHomeRun Flex 4K &middot; OTA Broadcast</p>
           </div>
           <div className="flex items-center gap-3">
-            {error && <span className="text-xs text-danger">{error}</span>}
+            {displayError && <span className="text-xs text-danger">{displayError}</span>}
             <span className={`badge ${hdhrStatus?.connected ? 'badge-live' : hdhrStatus === null ? 'badge-brand' : 'bg-danger/10 text-danger border border-danger/20'}`}>
               {hdhrStatus?.connected ? 'HDHomeRun Connected' : hdhrStatus === null ? 'Connecting...' : 'No Device'}
             </span>
@@ -276,7 +163,6 @@ function TVPage() {
                 >
                   <div className="flex items-center gap-3">
                     {(() => {
-                      // Try: 1) hardcoded network logo, 2) dynamic station lookup by name
                       const logoUrl = meta?.logo || getTVStationLogo(ch.GuideName);
                       if (logoUrl) {
                         return <img src={logoUrl} alt={ch.GuideName} className="w-6 h-6 object-contain rounded-sm shrink-0" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
@@ -311,7 +197,6 @@ function TVPage() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }
@@ -329,10 +214,28 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
   onStop: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setTick] = useState(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Move the shared video element into our container when mounted
+  useEffect(() => {
+    const video = videoRef.current;
+    const container = videoContainerRef.current;
+    if (video && container) {
+      video.className = 'w-full h-full';
+      video.style.display = '';
+      container.appendChild(video);
+    }
+    return () => {
+      // When unmounting, hide the video but don't stop playback
+      if (video) {
+        video.className = 'hidden';
+      }
+    };
+  }, [videoRef]);
 
   // Get current show info
   const now = Math.floor(Date.now() / 1000);
@@ -370,23 +273,17 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
 
   // Track fullscreen state
   useEffect(() => {
-    const onFSChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+    const onFSChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFSChange);
     return () => document.removeEventListener('fullscreenchange', onFSChange);
   }, []);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      containerRef.current.requestFullscreen();
-    }
+    if (document.fullscreenElement) document.exitFullscreen();
+    else containerRef.current.requestFullscreen();
   };
 
-  // Toggle play/pause
   const togglePlayPause = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -402,12 +299,8 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
       onMouseEnter={revealOverlay}
       onClick={revealOverlay}
     >
-      <video
-        ref={videoRef}
-        className="w-full h-full"
-        autoPlay
-        muted={false}
-      />
+      {/* Video element mount point */}
+      <div ref={videoContainerRef} className="w-full h-full" />
 
       {/* Idle state */}
       {!isPlaying && !isBuffering && !selectedChannel && (
@@ -445,7 +338,7 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
             showOverlay ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          {/* Top-left: channel badge (minimal) */}
+          {/* Top-left: channel badge */}
           <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-5 pointer-events-auto">
             <div className="flex items-center gap-2.5">
               <span className="text-base font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
@@ -456,12 +349,10 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
             </div>
           </div>
 
-          {/* Bottom: all show info + controls */}
+          {/* Bottom: show info + controls */}
           <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-16 pb-5 px-5 pointer-events-auto">
-            {/* Show info row */}
             {current && (
               <div className="flex items-end gap-4 mb-4">
-                {/* Show poster */}
                 {showInfo?.image && (
                   <img
                     src={showInfo.image}
@@ -470,15 +361,11 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
                 )}
-
                 <div className="min-w-0 flex-1">
-                  {/* Title */}
                   <h3 className="text-lg font-bold text-white drop-shadow-lg leading-tight">{current.Title}</h3>
                   {current.EpisodeTitle && (
                     <p className="text-sm text-white/70 mt-0.5 drop-shadow">&ldquo;{current.EpisodeTitle}&rdquo;</p>
                   )}
-
-                  {/* Metadata badges */}
                   <div className="flex items-center gap-2.5 mt-2 flex-wrap">
                     {showInfo?.rating && (
                       <span className="flex items-center gap-1 text-sm text-yellow-400 font-medium">
@@ -493,15 +380,11 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
                       <span className="text-xs text-white/50 font-mono">{timeRemaining} min left</span>
                     )}
                   </div>
-
-                  {/* Synopsis */}
                   {(current.Synopsis || showInfo?.summary) && (
                     <p className="text-sm text-white/60 mt-2 line-clamp-2 leading-relaxed max-w-2xl hidden sm:block">
                       {current.Synopsis || showInfo?.summary}
                     </p>
                   )}
-
-                  {/* Cast */}
                   {showInfo?.cast && showInfo.cast.length > 0 && (
                     <div className="flex items-center gap-3 mt-2.5 hidden md:flex">
                       {showInfo.cast.slice(0, 4).map((c) => (
@@ -519,17 +402,13 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
             {/* Progress bar */}
             {current && (
               <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mb-4 cursor-pointer group">
-                <div
-                  className="h-full bg-tv rounded-full transition-all duration-1000 group-hover:bg-tv/90"
-                  style={{ width: `${progress}%` }}
-                />
+                <div className="h-full bg-tv rounded-full transition-all duration-1000 group-hover:bg-tv/90" style={{ width: `${progress}%` }} />
               </div>
             )}
 
-            {/* Controls row */}
+            {/* Controls */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                {/* Play/Pause */}
                 <button onClick={togglePlayPause} className="text-white/90 hover:text-white transition-colors hover:scale-110 active:scale-95">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
                     {videoRef.current?.paused
@@ -538,26 +417,21 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
                     }
                   </svg>
                 </button>
-                {/* Stop */}
                 <button onClick={onStop} className="text-white/60 hover:text-red-400 transition-colors hover:scale-110 active:scale-95">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                 </button>
-                {/* Time display */}
                 {current && (
                   <span className="text-sm text-white/60 font-mono ml-1">
                     {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
                   </span>
                 )}
               </div>
-
               <div className="flex items-center gap-4">
-                {/* Up next */}
                 {next && (
                   <span className="text-sm text-white/50 hidden sm:inline">
                     Next: <span className="text-white/70">{next.Title}</span>
                   </span>
                 )}
-                {/* Fullscreen */}
                 <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors hover:scale-110 active:scale-95">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     {isFullscreen ? (

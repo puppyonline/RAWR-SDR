@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useTVPlayer } from '../hooks/useTVPlayer';
 
 interface GuideEntry {
   Title: string;
@@ -22,6 +23,8 @@ function TVGuide() {
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<{ channel: GuideChannel; program: GuideEntry } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const { state, tuneChannel } = useTVPlayer();
 
   useEffect(() => {
     fetchGuide();
@@ -32,7 +35,6 @@ function TVGuide() {
       const res = await fetch('/api/hdhr/guide');
       if (res.ok) {
         const data = await res.json();
-        // Filter out ATSC 3.0 (channel numbers >= 100) and DRM channels
         const filtered = data.filter((ch: any) => {
           const num = parseFloat(ch.GuideNumber);
           if (num >= 100) return false;
@@ -44,9 +46,18 @@ function TVGuide() {
     setLoading(false);
   };
 
+  const handleWatchChannel = (channel: GuideChannel) => {
+    // Tune via shared context then navigate to live TV
+    tuneChannel({
+      GuideNumber: channel.GuideNumber,
+      GuideName: channel.GuideName,
+      URL: '',
+    });
+    navigate('/tv');
+  };
+
   const now = Math.floor(Date.now() / 1000);
-  // Show 4 hours of programming
-  const startTime = now - (now % 1800); // round to nearest 30 min
+  const startTime = now - (now % 1800);
   const endTime = startTime + 4 * 3600;
   const totalDuration = endTime - startTime;
 
@@ -94,7 +105,15 @@ function TVGuide() {
           <h1 className="section-title">TV Guide</h1>
           <p className="section-subtitle mt-0.5">{guide.length} channels &middot; {formatTime(startTime)} &ndash; {formatTime(endTime)}</p>
         </div>
-        <Link to="/tv" className="btn-ghost btn-sm">Watch Live</Link>
+        <div className="flex items-center gap-3">
+          {/* Show current playback status */}
+          {state.selectedChannel && (
+            <span className="text-xs text-zinc-400">
+              Playing: <span className="text-tv font-medium">{state.selectedChannel.GuideName}</span>
+            </span>
+          )}
+          <Link to="/tv" className="btn-ghost btn-sm">Watch Live</Link>
+        </div>
       </div>
 
       {/* EPG Grid */}
@@ -124,45 +143,53 @@ function TVGuide() {
 
         {/* Channel rows */}
         <div ref={gridRef} className="max-h-[calc(100vh-220px)] overflow-y-auto">
-          {guide.map((ch) => (
-            <div key={ch.GuideNumber} className="flex border-b border-bg-border last:border-0 hover:bg-bg-hover/30 transition-colors">
-              {/* Channel label */}
-              <div className="w-32 md:w-40 shrink-0 p-2 border-r border-bg-border flex items-center gap-2">
-                <span className="text-xs font-mono text-zinc-500 w-7">{ch.GuideNumber}</span>
-                <span className="text-xs text-zinc-300 truncate">{ch.GuideName}</span>
-              </div>
+          {guide.map((ch) => {
+            const isCurrentlyPlaying = state.selectedChannel?.GuideNumber === ch.GuideNumber;
 
-              {/* Programs */}
-              <div className="flex-1 relative h-12 overflow-hidden">
-                {ch.Guide?.filter((p) => p.EndTime > startTime && p.StartTime < endTime).map((program, i) => {
-                  const left = getPosition(Math.max(program.StartTime, startTime));
-                  const width = getWidth(program.StartTime, program.EndTime);
-                  const isCurrent = program.StartTime <= now && program.EndTime > now;
+            return (
+              <div key={ch.GuideNumber} className={`flex border-b border-bg-border last:border-0 hover:bg-bg-hover/30 transition-colors ${isCurrentlyPlaying ? 'bg-tv/[0.03]' : ''}`}>
+                {/* Channel label — clickable to tune */}
+                <button
+                  onClick={() => handleWatchChannel(ch)}
+                  className="w-32 md:w-40 shrink-0 p-2 border-r border-bg-border flex items-center gap-2 hover:bg-bg-hover/50 transition-colors text-left"
+                >
+                  <span className="text-xs font-mono text-zinc-500 w-7">{ch.GuideNumber}</span>
+                  <span className={`text-xs truncate ${isCurrentlyPlaying ? 'text-tv font-medium' : 'text-zinc-300'}`}>{ch.GuideName}</span>
+                  {isCurrentlyPlaying && <div className="w-1.5 h-1.5 rounded-full bg-tv animate-pulse shrink-0" />}
+                </button>
 
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedProgram({ channel: ch, program })}
-                      className={`absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden border transition-colors cursor-pointer ${
-                        isCurrent
-                          ? 'bg-brand/10 border-brand/30 hover:bg-brand/20'
-                          : 'bg-bg-raised border-bg-border hover:bg-bg-hover'
-                      }`}
-                      style={{ left: `${left}%`, width: `${width}%` }}
-                      title={program.Title}
-                    >
-                      <span className={`text-2xs truncate block ${isCurrent ? 'text-brand-bright font-medium' : 'text-zinc-400'}`}>
-                        {program.Title}
-                      </span>
-                      {program.EpisodeTitle && (
-                        <span className="text-2xs text-zinc-600 truncate block">{program.EpisodeTitle}</span>
-                      )}
-                    </button>
-                  );
-                })}
+                {/* Programs */}
+                <div className="flex-1 relative h-12 overflow-hidden">
+                  {ch.Guide?.filter((p) => p.EndTime > startTime && p.StartTime < endTime).map((program, i) => {
+                    const left = getPosition(Math.max(program.StartTime, startTime));
+                    const width = getWidth(program.StartTime, program.EndTime);
+                    const isCurrent = program.StartTime <= now && program.EndTime > now;
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedProgram({ channel: ch, program })}
+                        className={`absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden border transition-colors cursor-pointer ${
+                          isCurrent
+                            ? 'bg-brand/10 border-brand/30 hover:bg-brand/20'
+                            : 'bg-bg-raised border-bg-border hover:bg-bg-hover'
+                        }`}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                        title={program.Title}
+                      >
+                        <span className={`text-2xs truncate block ${isCurrent ? 'text-brand-bright font-medium' : 'text-zinc-400'}`}>
+                          {program.Title}
+                        </span>
+                        {program.EpisodeTitle && (
+                          <span className="text-2xs text-zinc-600 truncate block">{program.EpisodeTitle}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -191,7 +218,9 @@ function TVGuide() {
             </button>
           </div>
           <div className="mt-4">
-            <Link to="/tv" className="btn-brand btn-sm">Watch Now</Link>
+            <button onClick={() => handleWatchChannel(selectedProgram.channel)} className="btn-brand btn-sm">
+              Watch Now
+            </button>
           </div>
         </div>
       )}
