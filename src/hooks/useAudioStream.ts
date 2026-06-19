@@ -69,9 +69,10 @@ export function useAudioStream() {
 
     const ctx = audioCtxRef.current;
 
-    // Create gain node if needed
+    // Create gain node if needed — start at 50% to avoid hot output
     if (!gainNodeRef.current || gainNodeRef.current.context !== ctx) {
       gainNodeRef.current = ctx.createGain();
+      gainNodeRef.current.gain.value = 0.25; // default output level (quadratic 50%)
       gainNodeRef.current.connect(ctx.destination);
     }
 
@@ -116,10 +117,11 @@ export function useAudioStream() {
       if (!(event.data instanceof ArrayBuffer)) return;
 
       // rtl_fm outputs signed 16-bit little-endian PCM at 48kHz
+      // Scale down by 0.5 to prevent hot output (rtl_fm can output near full-scale)
       const int16 = new Int16Array(event.data);
       const float32 = new Float32Array(int16.length);
       for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 32768;
+        float32[i] = (int16[i] / 32768) * 0.5;
       }
 
       bufferQueueRef.current.push(float32);
