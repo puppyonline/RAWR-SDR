@@ -3,7 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, ChildProcess, execSync } from 'child_process';
-import { demodFM, demodAM, resetState } from './dsp';
+import { demodAM, resetState } from './dsp';
 
 const app = express();
 const PORT = 3001;
@@ -20,7 +20,6 @@ let sdrDetected = false;
 let currentRDS: Record<string, any> = {};
 let currentMode = '';
 
-// Detect RTL-SDR
 function detectSDR(): boolean {
   try {
     const cmd = process.platform === 'win32' ? 'rtl_test.exe' : 'rtl_test';
@@ -34,8 +33,7 @@ function detectSDR(): boolean {
 
 function hasRedsea(): boolean {
   try {
-    const cmd = process.platform === 'win32' ? 'where redsea' : 'which redsea';
-    execSync(cmd, { stdio: 'pipe' });
+    execSync(process.platform === 'win32' ? 'where redsea' : 'which redsea', { stdio: 'pipe' });
     return true;
   } catch { return false; }
 }
@@ -46,9 +44,7 @@ try {
   sdrDetected = detectSDR();
   console.log(`[RAWR-SDR] Device: ${sdrDetected ? 'DETECTED' : 'NOT FOUND'}`);
   console.log(`[RAWR-SDR] Redsea: ${redseaAvailable ? 'AVAILABLE' : 'NOT FOUND'}`);
-} catch {
-  console.log('[RAWR-SDR] Detection skipped');
-}
+} catch { console.log('[RAWR-SDR] Detection skipped'); }
 
 app.get('/api/status', (_req, res) => {
   res.json({
@@ -61,27 +57,23 @@ app.get('/api/status', (_req, res) => {
   });
 });
 
-app.get('/api/rds', (_req, res) => {
-  res.json(currentRDS);
-});
+app.get('/api/rds', (_req, res) => res.json(currentRDS));
 
 /**
- * Tuning with rtl_sdr + server-side DSP.
+ * Hybrid tuning approach:
  *
- * Instead of relying on rtl_fm (which has broken resampling on Windows),
- * we use rtl_sdr to capture raw unsigned 8-bit IQ samples and do all
- * demodulation/decimation/filtering in Node.js (see dsp.ts).
+ * FM/HD: Use rtl_fm (proven working on this Windows machine at 171k for RDS)
+ *   - rtl_fm handles wideband FM demodulation internally
+ *   - We downsample 171k->48k in Node for audio
+ *   - Pipe to redsea for RDS if available
  *
- * This is the same approach used by OpenWebRX/KiwiSDR/csdr:
- *   rtl_sdr (raw IQ) -> demodulate -> decimate -> filter -> PCM audio
- *
- * Sample rate: 240kHz for all modes (minimum reliable for RTL-SDR hardware)
- * After 5:1 decimation: 48kHz audio output
+ * AM/ATC: Use rtl_sdr + our own DSP (rtl_fm's resample is broken on Windows)
+ *   - rtl_sdr captures raw IQ at 240kHz
+ *   - server/dsp.ts does envelope detection + decimation + AGC
  */
 app.post('/api/tune', async (req, res) => {
   const { frequency, mode } = req.body;
 
-  // Kill existing
   if (redseaProcess) { redseaProcess.kill('SIGTERM'); redseaProcess = null; }
   if (activeProcess) {
     activeProcess.kill('SIGTERM');
@@ -93,91 +85,123 @@ app.post('/api/tune', async (req, res) => {
   currentMode = mode;
 
   const isWin = process.platform === 'win32';
-  const rtlSdr = isWin ? 'rtl_sdr.exe' : 'rtl_sdr';
-
-  // Build rtl_sdr command
-  // rtl_sdr outputs raw unsigned 8-bit IQ pairs to stdout
-  // -s 240000 = 240kHz sample rate
-  // -g 20 = 20 dB gain (or 30 for AM)
-  // -f freq = center frequency in Hz
-  let freqHz: number;
-  let gain: number;
-  let directSampling = false;
-
-  switch (mode) {
-    case 'fm':
-    case 'hd':
-      freqHz = frequency * 1_000_000; // MHz to Hz
-      gain = 20;
-      break;
-    case 'am':
-      freqHz = frequency * 1000; // kHz to Hz
-      gain = 30;
-      directSampling = true;
-      break;
-    case 'atc':
-      freqHz = frequency * 1_000_000; // MHz to Hz
-      gain = 30;
-      break;
-    default:
-      res.status(400).json({ error: `Unknown mode: ${mode}` });
-      return;
-  }
-
-  const args = [
-    '-s', '240000',
-    '-f', String(Math.round(freqHz)),
-    '-g', String(gain),
-    '-', // output to stdout
-  ];
-
-  if (directSampling) {
-    // Direct sampling mode for HF/MF (AM broadcast band)
-    // Mode 2 = Q-branch ADC input
-    args.unshift('-D', '2');
-  }
-
-  console.log(`[RAWR-SDR] Tuning: ${rtlSdr} ${args.join(' ')} [mode=${mode}]`);
 
   try {
-    activeProcess = spawn(rtlSdr, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    if (mode === 'fm' || mode === 'hd') {
+      // === FM: use rtl_fm at 171k (works, proven in earlier testing) ===
+      const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
+      const args = [
+        '-M', 'fm',
+        '-f', `${frequency}M`,
+        '-s', '171k',
+        '-l', '0',
+        '-E', 'deemp',
+        '-g', '20',
+      ];
 
-    activeProcess.stderr?.on('data', (data: Buffer) => {
-      const msg = data.toString().trim();
-      if (msg) console.log(`[rtl_sdr] ${msg}`);
-    });
+      console.log(`[RAWR-SDR] FM: ${rtlFm} ${args.join(' ')}`);
+      activeProcess = spawn(rtlFm, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
-    // Process raw IQ data -> demodulate -> send PCM to clients
-    const demod = (mode === 'am' || mode === 'atc') ? demodAM : demodFM;
+      activeProcess.stderr?.on('data', (d: Buffer) => {
+        const m = d.toString().trim();
+        if (m) console.log(`[rtl_fm] ${m}`);
+      });
 
-    activeProcess.stdout?.on('data', (chunk: Buffer) => {
-      // Demodulate raw IQ to 48kHz 16-bit PCM
-      const pcm = demod(chunk);
-      if (pcm.length > 0) {
-        wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(pcm);
+      // Spawn redsea if available
+      if (redseaAvailable) {
+        const redseaCmd = isWin ? 'redsea.exe' : 'redsea';
+        redseaProcess = spawn(redseaCmd, ['-r', '171k'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        redseaProcess.stdin?.on('error', () => {});
+        redseaProcess.stdout?.on('data', (d: Buffer) => {
+          const lines = d.toString().split('\n').filter(Boolean);
+          for (const line of lines) {
+            try {
+              const rds = JSON.parse(line);
+              if (rds.ps) currentRDS.ps = rds.ps;
+              if (rds.radiotext) currentRDS.radiotext = rds.radiotext;
+              if (rds.prog_type) currentRDS.prog_type = rds.prog_type;
+              if (rds.pi) currentRDS.pi = rds.pi;
+              if (rds.radiotext_plus?.tags) {
+                for (const tag of rds.radiotext_plus.tags) {
+                  if (tag['content-type'] === 'item.title') currentRDS.title = tag.data;
+                  if (tag['content-type'] === 'item.artist') currentRDS.artist = tag.data;
+                }
+              }
+              const rdsMsg = JSON.stringify({ type: 'rds', data: currentRDS });
+              wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(rdsMsg); });
+            } catch {}
           }
         });
+        redseaProcess.stderr?.on('data', (d: Buffer) => {
+          const m = d.toString().trim();
+          if (m) console.log(`[redsea] ${m}`);
+        });
+        redseaProcess.on('close', () => { redseaProcess = null; });
       }
 
-      // For FM with redsea: also pipe raw data to redsea
-      // (redsea needs the MPX signal, which we'd get from FM demod before decimation)
-      // Note: redsea integration with rtl_sdr requires different pipeline
-      // For now RDS works only if rtl_fm+redsea are available as fallback
-    });
+      // Downsample 171kHz -> 48kHz for audio
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        // Feed to redsea
+        if (redseaProcess?.stdin?.writable) {
+          try { redseaProcess.stdin.write(chunk); } catch {}
+        }
+
+        // Downsample: 171000/48000 ≈ 3.5625:1
+        const usable = chunk.length & ~1;
+        if (usable < 4) return;
+        const srcSamples = usable / 2;
+        const ratio = 171000 / 48000;
+        const dstSamples = Math.floor(srcSamples / ratio);
+        if (dstSamples < 1) return;
+
+        const output = Buffer.alloc(dstSamples * 2);
+        for (let i = 0; i < dstSamples; i++) {
+          const srcPos = i * ratio;
+          const srcIdx = Math.min(Math.floor(srcPos), srcSamples - 1);
+          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
+        }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+      });
+
+    } else {
+      // === AM / ATC: use rtl_sdr + our DSP ===
+      const rtlSdr = isWin ? 'rtl_sdr.exe' : 'rtl_sdr';
+      const freqHz = mode === 'am'
+        ? Math.round(frequency * 1000)
+        : Math.round(frequency * 1_000_000);
+
+      const args: string[] = [];
+      if (mode === 'am') args.push('-D', '2'); // direct sampling Q-branch
+      args.push('-s', '240000', '-f', String(freqHz), '-g', '30', '-');
+
+      console.log(`[RAWR-SDR] AM/ATC: ${rtlSdr} ${args.join(' ')}`);
+      activeProcess = spawn(rtlSdr, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      activeProcess.stderr?.on('data', (d: Buffer) => {
+        const m = d.toString().trim();
+        if (m) console.log(`[rtl_sdr] ${m}`);
+      });
+
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        const pcm = demodAM(chunk);
+        if (pcm.length > 0) {
+          wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(pcm); });
+        }
+      });
+    }
 
     activeProcess.on('error', (err) => {
-      console.error(`[rtl_sdr] Error: ${err.message}`);
+      console.error(`[SDR] Error: ${err.message}`);
       activeProcess = null;
     });
 
     activeProcess.on('close', (code) => {
-      console.log(`[rtl_sdr] Exited (code ${code})`);
+      console.log(`[SDR] Exited (code ${code})`);
       activeProcess = null;
     });
 
-    res.json({ success: true, frequency, mode, freqHz, gain });
+    res.json({ success: true, frequency, mode });
   } catch (err: any) {
     res.status(500).json({ error: `Failed: ${err.message}` });
   }
@@ -191,18 +215,15 @@ app.post('/api/stop', (_req, res) => {
   res.json({ success: true });
 });
 
-// ADS-B
 app.post('/api/adsb/start', (_req, res) => {
   if (activeProcess) { activeProcess.kill('SIGTERM'); activeProcess = null; }
   const cmd = process.platform === 'win32' ? 'dump1090.exe' : 'dump1090';
   try {
     activeProcess = spawn(cmd, ['--interactive', '--net'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    activeProcess.on('error', (err) => { console.error(`[dump1090] ${err.message}`); activeProcess = null; });
-    activeProcess.on('close', (code) => { console.log(`[dump1090] Exited (${code})`); activeProcess = null; });
+    activeProcess.on('error', (e) => { console.error(`[dump1090] ${e.message}`); activeProcess = null; });
+    activeProcess.on('close', (c) => { console.log(`[dump1090] Exited (${c})`); activeProcess = null; });
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/adsb/stop', (_req, res) => {
@@ -210,7 +231,6 @@ app.post('/api/adsb/stop', (_req, res) => {
   res.json({ success: true });
 });
 
-// WebSocket
 wss.on('connection', (ws) => {
   console.log('[WS] Client connected');
   if (Object.keys(currentRDS).length > 0) {
