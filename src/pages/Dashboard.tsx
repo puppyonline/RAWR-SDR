@@ -177,6 +177,7 @@ function Dashboard() {
           <QuickCard to="/hd" label="HD Radio" count="27 channels" accent="radio" icon={<HDIcon />} />
           <QuickCard to="/am" label="AM Radio" count="20 stations" accent="radio" icon={<AMIcon />} />
           <QuickCard to="/tv" label="Live TV" count="HDHR Flex 4K" accent="tv" icon={<TVIcon />} />
+          <QuickCard to="/weather" label="Weather" count="NOAA NWR" accent="aviation" icon={<WeatherIcon />} />
           <QuickCard to="/atc" label="ATC Scanner" count="PHX &middot; IWA" accent="aviation" icon={<PlaneIcon />} />
           <QuickCard to="/adsb" label="ADS-B" count="1090 MHz" accent="aviation" icon={<RadarIcon />} />
         </div>
@@ -311,6 +312,9 @@ function RadarIcon() {
 }
 function AMIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12c0 0 3-8 10-8s10 8 10 8"/><path d="M5 12c0 0 2-5 7-5s7 5 7 5"/><circle cx="12" cy="12" r="2"/></svg>;
+}
+function WeatherIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2v2M4.93 4.93l1.41 1.41M20 12h-2M19.07 4.93l-1.41 1.41M12 20v2M4.93 19.07l1.41-1.41M4 12H2M19.07 19.07l-1.41-1.41"/><circle cx="12" cy="12" r="4"/></svg>;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

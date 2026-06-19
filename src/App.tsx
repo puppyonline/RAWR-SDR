@@ -8,6 +8,7 @@ import HDRadio from './pages/HDRadio';
 import ADSBTracker from './pages/ADSBTracker';
 import TVPage from './pages/TVPage';
 import TVGuide from './pages/TVGuide';
+import WeatherRadio from './pages/WeatherRadio';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="hd" element={<HDRadio />} />
         <Route path="tv" element={<TVPage />} />
         <Route path="guide" element={<TVGuide />} />
+        <Route path="weather" element={<WeatherRadio />} />
         <Route path="adsb" element={<ADSBTracker />} />
       </Route>
     </Routes>

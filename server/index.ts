@@ -107,7 +107,8 @@ app.post('/api/tune', async (req, res) => {
 
   try {
     if (mode === 'fm') {
-      // === FM: use rtl_fm at 171k (works, proven in earlier testing) ===
+      // === FM: use rtl_fm at 171k ===
+      // E4000 optimal gain for FM: 29 dB (strong local signals, avoid overload)
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'fm',
@@ -115,7 +116,7 @@ app.post('/api/tune', async (req, res) => {
         '-s', '171k',
         '-l', '0',
         '-E', 'deemp',
-        '-g', '20',
+        '-g', '29',
       ];
 
       console.log(`[RAWR-SDR] FM: ${rtlFm} ${args.join(' ')}`);
@@ -270,10 +271,49 @@ app.post('/api/tune', async (req, res) => {
         '-f', `${frequency}M`,
         '-s', '171k',
         '-l', '0',
-        '-g', '30',
+        '-g', '42',
       ];
 
       console.log(`[RAWR-SDR] ATC: ${rtlFm} ${args.join(' ')}`);
+      activeProcess = spawn(rtlFm, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      activeProcess.stderr?.on('data', (d: Buffer) => {
+        const m = d.toString().trim();
+        if (m) console.log(`[rtl_fm] ${m}`);
+      });
+
+      // Downsample 171kHz -> 48kHz
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        const usable = chunk.length & ~1;
+        if (usable < 4) return;
+        const srcSamples = usable / 2;
+        const ratio = 171000 / 48000;
+        const dstSamples = Math.floor(srcSamples / ratio);
+        if (dstSamples < 1) return;
+
+        const output = Buffer.alloc(dstSamples * 2);
+        for (let i = 0; i < dstSamples; i++) {
+          const srcIdx = Math.min(Math.floor(i * ratio), srcSamples - 1);
+          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
+        }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+      });
+
+    } else if (mode === 'noaa') {
+      // === NOAA Weather Radio: narrowband FM on 162.4-162.55 MHz ===
+      // E4000 handles this range perfectly. Use NFM demod with 12.5k bandwidth.
+      const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
+      const args = [
+        '-M', 'fm',
+        '-f', `${frequency}M`,
+        '-s', '171k',
+        '-l', '0',
+        '-E', 'deemp',
+        '-g', '34',
+      ];
+
+      console.log(`[RAWR-SDR] NOAA: ${rtlFm} ${args.join(' ')}`);
       activeProcess = spawn(rtlFm, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
       activeProcess.stderr?.on('data', (d: Buffer) => {
