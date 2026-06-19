@@ -128,10 +128,132 @@ router.get('/tv/show', async (req: Request, res: Response) => {
   const title = req.query.title as string;
   if (!title) return res.status(400).json({ error: 'title param required' });
 
+  // Try TVmaze first
   const info = await lookupTVShow(title);
-  if (!info) return res.status(404).json({ error: 'Show not found' });
-  res.json(info);
+  if (info) return res.json(info);
+
+  // Fallback: try Zeam for local shows
+  const zeamInfo = await lookupZeamShow(title);
+  if (zeamInfo) return res.json(zeamInfo);
+
+  res.status(404).json({ error: 'Show not found' });
 });
+
+// ─── Zeam: Local Show Metadata (scraped from embedded JSON) ────────────────
+
+// Known Phoenix-area local shows and their Zeam publisher slugs
+const zeamLocalShows: Record<string, string> = {
+  'your life arizona': '/publishers/1216/your-life-arizona-from-ktvk',
+  'good morning arizona': '/publishers/1215/good-morning-arizona-from-ktvk',
+  '12 news': '/publishers/1217/12-news-from-kpnx',
+  'arizona midday': '/publishers/1218/arizona-midday-from-12-news',
+  'abc15 mornings': '/publishers/1219/abc15-mornings',
+  'abc15 arizona': '/publishers/1220/abc15-arizona',
+  'sonoran living': '/publishers/1221/sonoran-living-from-abc15',
+};
+
+function fetchText(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, { timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Airwave/2.0)' } }, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchText(res.headers.location).then(resolve).catch(reject);
+        return;
+      }
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
+
+async function lookupZeamShow(title: string): Promise<TVShowInfo | null> {
+  const cacheKey = `zeam:${title.toLowerCase()}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached;
+
+  // Find matching Zeam publisher by fuzzy matching show title
+  const normalized = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  let slug: string | null = null;
+
+  for (const [key, value] of Object.entries(zeamLocalShows)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      slug = value;
+      break;
+    }
+  }
+
+  // Also try matching by partial words
+  if (!slug) {
+    const words = normalized.split(/\s+/);
+    for (const [key, value] of Object.entries(zeamLocalShows)) {
+      const keyWords = key.split(/\s+/);
+      const matchCount = words.filter((w) => keyWords.some((kw) => kw.includes(w) || w.includes(kw))).length;
+      if (matchCount >= 2) {
+        slug = value;
+        break;
+      }
+    }
+  }
+
+  if (!slug) {
+    setCache(cacheKey, null, SHORT_CACHE);
+    return null;
+  }
+
+  try {
+    const html = await fetchText(`https://zeam.com${slug}`);
+
+    // Extract the embedded JSON from: var json={...};
+    const jsonMatch = html.match(/var\s+json\s*=\s*(\{[\s\S]*?\});\s*\n/);
+    if (!jsonMatch) {
+      setCache(cacheKey, null, SHORT_CACHE);
+      return null;
+    }
+
+    const data = JSON.parse(jsonMatch[1]);
+    const publisherGroup = data?.configurableTab?.pages ? null :
+      (data?.publisher?.publisherGroups || []).find((g: any) => g.publisher || g.show);
+
+    const publisher = publisherGroup?.publisher || data?.publisher?.publisherGroups?.[0]?.publisher;
+    const show = publisherGroup?.show || data?.publisher?.publisherGroups?.[1]?.show;
+
+    const description = publisher?.description || show?.description || null;
+    const name = publisher?.name || show?.name || title;
+
+    // Get the best image
+    let image: string | null = null;
+    const images = publisher?.images || show?.images || [];
+    const heroImage = images.find((img: any) => img.typeId === 1044 && parseInt(img.size) >= 640);
+    const thumbImage = images.find((img: any) => img.typeId === 1034 && parseInt(img.size) >= 400);
+    const anyImage = images.find((img: any) => img.url);
+    const imgData = heroImage || thumbImage || anyImage;
+    if (imgData?.url) {
+      image = imgData.url.startsWith('http') ? imgData.url : `https://${imgData.url}`;
+    }
+
+    const result: TVShowInfo = {
+      id: publisher?.publisherId || show?.showId || 0,
+      name,
+      summary: description,
+      genres: ['Local', 'Lifestyle'],
+      rating: null,
+      image,
+      network: 'Local (Zeam)',
+      runtime: show?.runTime ? Math.round(show.runTime / 60) : null,
+      premiered: null,
+      status: 'Running',
+      url: `https://zeam.com${slug}`,
+      cast: [],
+    };
+
+    setCache(cacheKey, result);
+    return result;
+  } catch {
+    setCache(cacheKey, null, SHORT_CACHE);
+    return null;
+  }
+}
 
 // ─── iTunes Search: Track Info + Album Art ─────────────────────────────────
 
