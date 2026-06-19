@@ -53,21 +53,28 @@ try {
 
 /**
  * Downsample 16-bit PCM from srcRate to dstRate using linear interpolation.
- * Returns a new Buffer of 16-bit signed LE PCM at the target rate.
+ * Handles odd-byte input by truncating to even boundary.
  */
 function downsample(input: Buffer, srcRate: number, dstRate: number): Buffer {
-  const srcSamples = input.length / 2; // 16-bit = 2 bytes per sample
+  // Ensure we have an even number of bytes (16-bit samples)
+  const usableBytes = input.length & ~1;
+  if (usableBytes < 4) return Buffer.alloc(0);
+
+  const srcSamples = usableBytes / 2;
   const ratio = srcRate / dstRate;
   const dstSamples = Math.floor(srcSamples / ratio);
+  if (dstSamples < 1) return Buffer.alloc(0);
+
   const output = Buffer.alloc(dstSamples * 2);
 
   for (let i = 0; i < dstSamples; i++) {
     const srcPos = i * ratio;
-    const srcIdx = Math.floor(srcPos);
+    const srcIdx = Math.min(Math.floor(srcPos), srcSamples - 1);
     const frac = srcPos - srcIdx;
 
     const s0 = input.readInt16LE(srcIdx * 2);
-    const s1 = srcIdx + 1 < srcSamples ? input.readInt16LE((srcIdx + 1) * 2) : s0;
+    const nextIdx = Math.min(srcIdx + 1, srcSamples - 1);
+    const s1 = input.readInt16LE(nextIdx * 2);
     const interpolated = Math.round(s0 + (s1 - s0) * frac);
 
     output.writeInt16LE(Math.max(-32768, Math.min(32767, interpolated)), i * 2);
@@ -148,8 +155,7 @@ app.post('/api/tune', async (req, res) => {
       args.push(
         '-M', 'am',
         '-f', `${frequency}k`,
-        '-s', '12k',
-        '-r', '48000',
+        '-s', '48k',            // 48kHz directly (no resample needed, avoids Windows heap crash)
         '-l', '0',
         '-g', '0',
         '-E', 'direct',
@@ -160,8 +166,7 @@ app.post('/api/tune', async (req, res) => {
       args.push(
         '-M', 'am',
         '-f', `${frequency}M`,
-        '-s', '12k',
-        '-r', '48000',
+        '-s', '48k',            // 48kHz directly (no -r resample)
         '-l', String(squelch || 50),
         '-g', '0',
         '-p', '0',
@@ -187,6 +192,9 @@ app.post('/api/tune', async (req, res) => {
       // Spawn redsea for RDS decoding
       const redseaCmd = isWin ? 'redsea.exe' : 'redsea';
       redseaProcess = spawn(redseaCmd, ['-r', '171k'], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      // Prevent EPIPE from crashing the server
+      redseaProcess.stdin?.on('error', () => {});
 
       redseaProcess.stdout?.on('data', (data: Buffer) => {
         // redsea outputs newline-delimited JSON
@@ -233,15 +241,19 @@ app.post('/api/tune', async (req, res) => {
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
         // Feed raw 171k data to redsea
         if (redseaProcess && redseaProcess.stdin?.writable) {
-          redseaProcess.stdin.write(chunk);
+          try {
+            redseaProcess.stdin.write(chunk);
+          } catch { /* ignore write errors */ }
         }
         // Downsample 171kHz -> 48kHz for audio playback
         const audioChunk = downsample(chunk, 171000, 48000);
-        wss.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(audioChunk);
-          }
-        });
+        if (audioChunk.length > 0) {
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(audioChunk);
+            }
+          });
+        }
       });
     } else {
       // Non-FM modes or no redsea: just forward PCM directly
