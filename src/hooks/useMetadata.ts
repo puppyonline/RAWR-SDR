@@ -84,12 +84,16 @@ export function useNowPlayingMeta(
   useEffect(() => {
     if (!artist && !title) {
       setMeta(null);
+      lastQuery.current = '';
       return;
     }
 
     const queryKey = `${artist || ''}|${title || ''}|${station || ''}`;
     if (queryKey === lastQuery.current) return;
     lastQuery.current = queryKey;
+
+    // Clear previous metadata immediately when query changes
+    setMeta(null);
 
     // Check client cache
     const cached = getClientCached<NowPlayingMeta>(`np:${queryKey}`);
@@ -107,7 +111,8 @@ export function useNowPlayingMeta(
     fetch(`/api/metadata/nowplaying?${params}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
+        if (!data) { setMeta(null); return; }
         const result: NowPlayingMeta = {
           track: data.track || null,
           artist: data.artist || null,
@@ -135,6 +140,7 @@ export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null 
   useEffect(() => {
     if (!showTitle) {
       setInfo(null);
+      lastTitle.current = '';
       return;
     }
 
@@ -142,6 +148,9 @@ export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null 
     const normalized = showTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
     if (normalized === lastTitle.current) return;
     lastTitle.current = normalized;
+
+    // Clear previous show info immediately when title changes
+    setInfo(null);
 
     // Check client cache
     const cached = getClientCached<TVShowInfo>(`tv:${normalized.toLowerCase()}`);
@@ -154,11 +163,13 @@ export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null 
     fetch(`/api/metadata/tv/show?title=${encodeURIComponent(normalized)}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (cancelled || !data) return;
-        setClientCache(`tv:${normalized.toLowerCase()}`, data);
-        setInfo(data);
+        if (cancelled) return;
+        if (data) {
+          setClientCache(`tv:${normalized.toLowerCase()}`, data);
+        }
+        setInfo(data || null);
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setInfo(null); });
 
     return () => { cancelled = true; };
   }, [showTitle]);
@@ -176,11 +187,15 @@ export function useWikiSummary(query: string | undefined): WikiSummary | null {
   useEffect(() => {
     if (!query) {
       setSummary(null);
+      lastQuery.current = '';
       return;
     }
 
     if (query === lastQuery.current) return;
     lastQuery.current = query;
+
+    // Clear previous summary immediately
+    setSummary(null);
 
     const cached = getClientCached<WikiSummary>(`wiki:${query.toLowerCase()}`);
     if (cached) {
@@ -192,11 +207,13 @@ export function useWikiSummary(query: string | undefined): WikiSummary | null {
     fetch(`/api/metadata/wiki?q=${encodeURIComponent(query)}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (cancelled || !data) return;
-        setClientCache(`wiki:${query.toLowerCase()}`, data);
-        setSummary(data);
+        if (cancelled) return;
+        if (data) {
+          setClientCache(`wiki:${query.toLowerCase()}`, data);
+        }
+        setSummary(data || null);
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setSummary(null); });
 
     return () => { cancelled = true; };
   }, [query]);
