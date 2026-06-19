@@ -534,7 +534,14 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
   // Fetch rich data
   const showInfo = useTVShowInfo(current?.Title);
   const stationWiki = useWikiSummary(baseCallsign, 'tv_station');
-  const networkWiki = useWikiSummary(network && network !== 'IND' ? `${network} (TV network)` : undefined, 'tv_station');
+
+  // Only look up the parent network wiki if the channel name actually contains the network name
+  // This prevents sub-channels like "Cozi", "Comet", "Outlaw" from showing CBS/NBC/FOX wiki info
+  const channelMatchesNetwork = network && rawName.toUpperCase().includes(network.toUpperCase());
+  const networkWiki = useWikiSummary(
+    !stationWiki && channelMatchesNetwork ? `${network} (TV network)` : undefined,
+    'tv_station'
+  );
 
   const formatTime = (epoch: number) =>
     new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
