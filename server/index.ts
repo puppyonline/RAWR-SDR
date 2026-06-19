@@ -278,7 +278,7 @@ app.post('/api/tune', async (req, res) => {
         '-f', `${frequency}M`,
         '-s', '240k',
         '-g', '24',
-        '-l', '0',
+        '-l', '50',
         '-E', 'offset',
         '-E', 'dc',
       ];
