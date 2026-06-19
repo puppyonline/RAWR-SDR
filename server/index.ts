@@ -97,12 +97,18 @@ app.post('/api/tune', (req, res) => {
   switch (mode) {
     case 'fm':
       // Wideband FM broadcast
-      // -M wbfm: internally does -M fm -s 170k -o 4 -A fast -r 32k -l 0 -E deemp
-      // Outputs at 32kHz which naturally filters the 19kHz stereo pilot tone
-      // (pilot is above 16kHz Nyquist at 32k sample rate, so it's removed)
+      // Explicit params: capture at 200kHz, 4x oversample, demodulate,
+      // resample final audio to 48kHz. The 19kHz pilot tone is filtered
+      // client-side with a BiquadFilter lowpass at 16kHz.
       args.push(
-        '-M', 'wbfm',
+        '-M', 'fm',
         '-f', `${frequency}M`,
+        '-s', '200k',
+        '-o', '4',
+        '-A', 'fast',
+        '-r', '48000',
+        '-l', '0',
+        '-E', 'deemp',
         '-g', '40',
       );
       break;
@@ -115,7 +121,7 @@ app.post('/api/tune', (req, res) => {
         '-M', 'am',
         '-f', `${frequency}k`,  // frequency in kHz (e.g., "880k")
         '-s', '12k',            // 12 kHz sample rate (AM bandwidth is ~10 kHz)
-        '-r', '32000',          // resample to 32 kHz (matches FM output rate)
+        '-r', '48000',          // resample to 48 kHz for WebAudio
         '-l', '0',             // no squelch
         '-g', '50',            // higher gain for weak AM signals
         '-E', 'direct',        // CRITICAL: enable direct sampling for HF/MF
@@ -130,7 +136,7 @@ app.post('/api/tune', (req, res) => {
         '-M', 'am',
         '-f', `${frequency}M`,  // frequency in MHz
         '-s', '12k',            // 12 kHz sample rate (narrowband voice)
-        '-r', '32000',          // resample to 32 kHz (matches FM output rate)
+        '-r', '48000',          // resample to 48 kHz for WebAudio
         '-l', String(squelch || 50), // squelch level (0-9999, higher = more aggressive)
         '-g', '42',             // moderate gain
         '-p', '0',              // PPM correction (user should calibrate)
@@ -139,10 +145,15 @@ app.post('/api/tune', (req, res) => {
 
     case 'hd':
       // HD Radio - analog FM fallback (true HD needs nrsc5)
-      // Same as FM broadcast wideband
       args.push(
-        '-M', 'wbfm',
+        '-M', 'fm',
         '-f', `${frequency}M`,
+        '-s', '200k',
+        '-o', '4',
+        '-A', 'fast',
+        '-r', '48000',
+        '-l', '0',
+        '-E', 'deemp',
         '-g', '40',
       );
       break;

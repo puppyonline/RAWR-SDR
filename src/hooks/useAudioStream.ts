@@ -7,12 +7,12 @@ interface AudioStreamState {
 }
 
 /**
- * Hook for streaming audio from the RTL-SDR backend.
+ * Streams PCM audio from the RTL-SDR backend over WebSocket.
  * 
- * Usage: call tune(frequency, mode) to start or retune.
- * The hook manages the WebSocket, AudioContext, and GainNode internally.
- * Changing frequency just calls tune() again — the server kills the old
- * rtl_fm process and starts a new one, audio buffers are flushed.
+ * Audio chain: BufferSource -> LowPassFilter (15kHz) -> GainNode -> Destination
+ * 
+ * The low-pass filter removes the 19kHz FM stereo pilot tone that rtl_fm
+ * passes through when outputting at 48kHz.
  */
 export function useAudioStream() {
   const [state, setState] = useState<AudioStreamState>({
@@ -24,6 +24,7 @@ export function useAudioStream() {
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const filterRef = useRef<BiquadFilterNode | null>(null);
   const nextTimeRef = useRef(0);
   const bufferQueueRef = useRef<Float32Array[]>([]);
   const processingRef = useRef(false);
@@ -33,20 +34,21 @@ export function useAudioStream() {
     processingRef.current = true;
 
     const ctx = audioCtxRef.current;
-    const gainNode = gainNodeRef.current;
-    if (!ctx || !gainNode) {
+    const filter = filterRef.current;
+    if (!ctx || !filter) {
       processingRef.current = false;
       return;
     }
 
     while (bufferQueueRef.current.length > 0) {
       const samples = bufferQueueRef.current.shift()!;
-      const buffer = ctx.createBuffer(1, samples.length, 32000);
+      const buffer = ctx.createBuffer(1, samples.length, 48000);
       buffer.getChannelData(0).set(samples);
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(gainNode);
+      // Route: source -> lowpass filter -> gain -> speakers
+      source.connect(filter);
 
       const currentTime = ctx.currentTime;
       const startTime = Math.max(nextTimeRef.current, currentTime + 0.02);
@@ -59,21 +61,35 @@ export function useAudioStream() {
 
   const ensureAudioContext = useCallback(async () => {
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-      // All modes output 32kHz PCM (wbfm default, AM/ATC resampled via -r 32000)
-      audioCtxRef.current = new AudioContext({ sampleRate: 32000 });
+      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
     }
     if (audioCtxRef.current.state === 'suspended') {
       await audioCtxRef.current.resume();
     }
-    if (!gainNodeRef.current || gainNodeRef.current.context !== audioCtxRef.current) {
-      gainNodeRef.current = audioCtxRef.current.createGain();
-      gainNodeRef.current.connect(audioCtxRef.current.destination);
+
+    const ctx = audioCtxRef.current;
+
+    // Create gain node if needed
+    if (!gainNodeRef.current || gainNodeRef.current.context !== ctx) {
+      gainNodeRef.current = ctx.createGain();
+      gainNodeRef.current.connect(ctx.destination);
+    }
+
+    // Create low-pass filter to kill 19kHz pilot tone
+    // Cutoff at 15kHz — removes pilot (19kHz) and SCA subcarriers (67kHz)
+    // while preserving all audible content (human hearing tops out ~15-16kHz)
+    if (!filterRef.current || filterRef.current.context !== ctx) {
+      filterRef.current = ctx.createBiquadFilter();
+      filterRef.current.type = 'lowpass';
+      filterRef.current.frequency.value = 15000;
+      filterRef.current.Q.value = 0.7; // Butterworth-like response
+      filterRef.current.connect(gainNodeRef.current);
     }
   }, []);
 
   const ensureWebSocket = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      return; // already connected
+      return;
     }
     if (wsRef.current) {
       wsRef.current.close();
@@ -90,11 +106,14 @@ export function useAudioStream() {
 
     ws.onmessage = (event) => {
       if (!(event.data instanceof ArrayBuffer)) return;
+
+      // rtl_fm outputs signed 16-bit little-endian PCM at 48kHz
       const int16 = new Int16Array(event.data);
       const float32 = new Float32Array(int16.length);
       for (let i = 0; i < int16.length; i++) {
         float32[i] = int16[i] / 32768;
       }
+
       bufferQueueRef.current.push(float32);
       while (bufferQueueRef.current.length > 100) {
         bufferQueueRef.current.shift();
@@ -114,14 +133,12 @@ export function useAudioStream() {
   }, [processQueue]);
 
   /**
-   * Tune to a frequency. If already playing, this retunes (kills old rtl_fm,
-   * starts new one). If not playing, this starts everything up.
+   * Tune to a frequency. Starts streaming if not already, or retunes live.
    */
   const tune = useCallback(async (frequency: number, mode: string) => {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
-      // Tell server to (re)tune — server handles killing old process
       const res = await fetch('/api/tune', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,11 +150,10 @@ export function useAudioStream() {
         throw new Error(err.error || 'Tune failed');
       }
 
-      // Flush stale audio
+      // Flush stale audio from previous frequency
       bufferQueueRef.current = [];
       nextTimeRef.current = 0;
 
-      // Ensure audio pipeline is running
       await ensureAudioContext();
       ensureWebSocket();
 
@@ -161,6 +177,7 @@ export function useAudioStream() {
       await audioCtxRef.current.close();
       audioCtxRef.current = null;
       gainNodeRef.current = null;
+      filterRef.current = null;
     }
 
     bufferQueueRef.current = [];
@@ -175,7 +192,6 @@ export function useAudioStream() {
     }
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
