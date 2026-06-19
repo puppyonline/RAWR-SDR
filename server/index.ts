@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, ChildProcess, execSync } from 'child_process';
 import hdhrRouter from './hdhr';
+import logosRouter from './logos';
 
 const app = express();
 const PORT = 3001;
@@ -61,6 +62,9 @@ app.get('/api/rds', (_req, res) => res.json(currentRDS));
 
 // HDHomeRun TV endpoints
 app.use('/api/hdhr', hdhrRouter);
+
+// Station logo/branding endpoints
+app.use('/api/logos', logosRouter);
 
 /**
  * Hybrid tuning approach:

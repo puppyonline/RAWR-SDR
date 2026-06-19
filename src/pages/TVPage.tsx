@@ -101,7 +101,7 @@ function TVPage() {
     const player = mpegts.default.createPlayer({
       type: 'mpegts',
       isLive: true,
-      url: `/api/hdhr/stream/${channel.GuideNumber}`,
+      url: `${window.location.origin}/api/hdhr/stream/${channel.GuideNumber}`,
     }, {
       enableWorker: true,
       liveBufferLatencyChasing: true,
