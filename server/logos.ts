@@ -68,7 +68,7 @@ router.get('/radio/:callsign', async (req: Request, res: Response) => {
   if (logo) {
     res.json({ callsign, logo });
   } else {
-    res.status(404).json({ callsign, logo: null });
+    res.json({ callsign, logo: null });
   }
 });
 
