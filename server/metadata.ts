@@ -433,6 +433,7 @@ async function lookupWikipedia(query: string, context?: 'tv_station' | 'artist' 
   if (context === 'tv_station') {
     // Try specific TV-related disambiguations first
     titlesToTry.push(query); // Direct callsign (e.g., "KTVK" — most stations have pages by callsign)
+    titlesToTry.push(`${query} TV`); // e.g., "Cozi TV", "Ion TV"
     titlesToTry.push(`${query}-TV`); // e.g., "KSAZ-TV"
     titlesToTry.push(`${query} (TV channel)`);
     titlesToTry.push(`${query} (TV network)`);
