@@ -27,11 +27,11 @@ function StationInfo({ callsign, frequency, format, unit = 'MHz', details, accen
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-zinc-100">{callsign}</h3>
-              <p className="text-xs text-zinc-500">{frequency} {unit} &middot; {format}</p>
+              <h3 className="text-sm font-semibold text-primary">{callsign}</h3>
+              <p className="text-xs text-muted">{frequency} {unit} &middot; {format}</p>
             </div>
             {onClose && (
-              <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 p-1">
+              <button onClick={onClose} className="text-muted hover:text-secondary p-1">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             )}
@@ -59,12 +59,12 @@ function StationInfo({ callsign, frequency, format, unit = 'MHz', details, accen
 function InfoRow({ label, value, isLink }: { label: string; value: string; isLink?: boolean }) {
   return (
     <div>
-      <span className="text-2xs text-zinc-600">{label}</span>
+      <span className="text-2xs text-faint">{label}</span>
       {isLink ? (
         <a href={value.startsWith('http') ? value : `https://${value}`} target="_blank" rel="noopener noreferrer"
           className="block text-xs text-brand-bright hover:underline truncate">{value}</a>
       ) : (
-        <p className="text-xs text-zinc-300 truncate">{value}</p>
+        <p className="text-xs text-secondary truncate">{value}</p>
       )}
     </div>
   );

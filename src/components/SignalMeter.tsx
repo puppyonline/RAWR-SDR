@@ -46,9 +46,9 @@ function SignalMeter({ getSignalLevel, isActive = false, color = '#3b82f6' }: Si
         })}
       </div>
       <div className="flex justify-between items-center">
-        <span className="text-2xs font-mono text-zinc-600">S0</span>
-        <span className="text-xs font-mono text-zinc-400">{value}%</span>
-        <span className="text-2xs font-mono text-zinc-600">S9+</span>
+        <span className="text-2xs font-mono text-faint">S0</span>
+        <span className="text-xs font-mono text-muted">{value}%</span>
+        <span className="text-2xs font-mono text-faint">S9+</span>
       </div>
     </div>
   );

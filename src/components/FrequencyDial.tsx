@@ -12,7 +12,7 @@ function FrequencyDial({ value, onChange, min, max, step, color = '#3b82f6' }: F
 
   return (
     <div className="space-y-1.5">
-      <div className="relative h-1.5 bg-bg-raised rounded-full overflow-hidden">
+      <div className="relative h-1.5 bg-raised rounded-full overflow-hidden">
         <div
           className="absolute top-0 left-0 h-full rounded-full transition-all duration-75"
           style={{ width: `${pct}%`, background: color }}
@@ -31,7 +31,7 @@ function FrequencyDial({ value, onChange, min, max, step, color = '#3b82f6' }: F
           style={{ left: `calc(${pct}% - 6px)`, borderColor: color }}
         />
       </div>
-      <div className="flex justify-between text-2xs font-mono text-zinc-600">
+      <div className="flex justify-between text-2xs font-mono text-faint">
         <span>{min}</span>
         <span>{max}</span>
       </div>

@@ -92,7 +92,7 @@ function FMRadio() {
           </div>
           <div className="flex items-center gap-3">
             {audio.error && <span className="text-xs text-danger">{audio.error}</span>}
-            {audio.isConnecting && <span className="text-xs text-zinc-500">Tuning...</span>}
+            {audio.isConnecting && <span className="text-xs text-muted">Tuning...</span>}
             <button onClick={togglePower} className={power ? 'btn-danger btn-sm' : 'btn-brand btn-sm'}>
               {power ? 'Power Off' : 'Power On'}
             </button>
@@ -102,7 +102,7 @@ function FMRadio() {
         {/* Frequency + status */}
         <div className="flex items-baseline gap-3 mb-5">
           <span className="freq-display">{frequency.toFixed(1)}</span>
-          <span className="text-sm text-zinc-500">MHz</span>
+          <span className="text-sm text-muted">MHz</span>
           {power && audio.isPlaying && (
             <span className="badge-live ml-3">LIVE</span>
           )}
@@ -117,14 +117,14 @@ function FMRadio() {
             <input type="number" min={87.5} max={108.0} step={0.1} value={frequency}
               onChange={(e) => setFrequency(Number(Number(e.target.value).toFixed(1)))}
               className="input w-24 font-mono text-center text-sm" />
-            <span className="text-xs text-zinc-500">MHz</span>
+            <span className="text-xs text-muted">MHz</span>
           </div>
           <div className="flex-1 flex items-center gap-3">
-            <span className="text-xs text-zinc-500">Vol</span>
+            <span className="text-xs text-muted">Vol</span>
             <input type="range" min="0" max="100" value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
-              className="flex-1 h-1 bg-bg-raised rounded-full appearance-none cursor-pointer accent-radio" />
-            <span className="text-xs font-mono text-zinc-500 w-8">{volume}%</span>
+              className="flex-1 h-1 bg-raised rounded-full appearance-none cursor-pointer accent-radio" />
+            <span className="text-xs font-mono text-muted w-8">{volume}%</span>
           </div>
         </div>
       </div>
@@ -169,8 +169,8 @@ function FMRadio() {
             >
               <StationLogo callsign={p.label} size={28} fallbackColor="#8b5cf6" />
               <div className="min-w-0">
-                <div className="text-xs font-medium text-zinc-200 truncate">{p.label}</div>
-                <div className="text-2xs text-zinc-500">{p.freq} &middot; {p.format}</div>
+                <div className="text-xs font-medium text-secondary truncate">{p.label}</div>
+                <div className="text-2xs text-muted">{p.freq} &middot; {p.format}</div>
               </div>
             </button>
           ))}
@@ -206,7 +206,7 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
           <StationLogo callsign={preset?.label || ''} size={44} fallbackColor="#8b5cf6" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-zinc-100">
+              <h3 className="text-sm font-semibold text-primary">
                 {preset?.label || `${frequency.toFixed(1)} FM`}
               </h3>
               {isPlaying && (
@@ -216,9 +216,9 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
                 </div>
               )}
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted">
               {frequency.toFixed(1)} MHz &middot; {preset?.format || 'FM Broadcast'}
-              {preset?.slogan && <span className="text-zinc-600"> &mdash; {preset.slogan}</span>}
+              {preset?.slogan && <span className="text-faint"> &mdash; {preset.slogan}</span>}
             </p>
           </div>
         </div>
@@ -245,14 +245,14 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-2xs text-zinc-500 uppercase tracking-wide">Now Playing</p>
-                <p className="text-sm font-medium text-zinc-100 mt-0.5 truncate">{rds.title || 'Unknown Track'}</p>
-                {rds.artist && <p className="text-xs text-zinc-400 mt-0.5 truncate">{rds.artist}</p>}
+                <p className="text-2xs text-muted uppercase tracking-wide">Now Playing</p>
+                <p className="text-sm font-medium text-primary mt-0.5 truncate">{rds.title || 'Unknown Track'}</p>
+                {rds.artist && <p className="text-xs text-muted mt-0.5 truncate">{rds.artist}</p>}
                 {/* Album + genre from iTunes */}
                 {meta?.track && (
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     {meta.track.album && (
-                      <span className="text-2xs text-zinc-500 truncate max-w-[12rem]">
+                      <span className="text-2xs text-muted truncate max-w-[12rem]">
                         {meta.track.album}
                       </span>
                     )}
@@ -272,13 +272,13 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
             </div>
           ) : rds.radiotext ? (
             <div>
-              <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Radio Text</p>
-              <p className="text-sm text-zinc-200">{rds.radiotext}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Radio Text</p>
+              <p className="text-sm text-secondary">{rds.radiotext}</p>
             </div>
           ) : rds.ps ? (
             <div>
-              <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Station ID</p>
-              <p className="text-sm text-zinc-200 font-medium">{rds.ps}</p>
+              <p className="text-xs text-muted uppercase tracking-wide mb-1">Station ID</p>
+              <p className="text-sm text-secondary font-medium">{rds.ps}</p>
             </div>
           ) : null}
         </div>
@@ -297,18 +297,18 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
             )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold text-zinc-200">{meta.artistWiki.title}</p>
+                <p className="text-xs font-semibold text-secondary">{meta.artistWiki.title}</p>
                 {meta.artist?.country && (
-                  <span className="text-2xs text-zinc-500">{meta.artist.country}</span>
+                  <span className="text-2xs text-muted">{meta.artist.country}</span>
                 )}
               </div>
-              <p className="text-2xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+              <p className="text-2xs text-muted mt-1 line-clamp-2 leading-relaxed">
                 {meta.artistWiki.extract}
               </p>
               {meta.artist?.genres && meta.artist.genres.length > 0 && (
                 <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                   {meta.artist.genres.slice(0, 4).map((g) => (
-                    <span key={g} className="text-2xs text-zinc-500 bg-white/[0.04] rounded px-1.5 py-0.5">
+                    <span key={g} className="text-2xs text-muted bg-white/[0.04] rounded px-1.5 py-0.5">
                       {g}
                     </span>
                   ))}
@@ -322,8 +322,8 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
       {/* Station Wikipedia blurb (when no track is playing) */}
       {meta?.stationWiki && !hasTrack && (
         <div className="p-4 border-b border-white/[0.04]">
-          <p className="text-2xs text-zinc-500 uppercase tracking-wide mb-1">About this station</p>
-          <p className="text-xs text-zinc-400 line-clamp-3 leading-relaxed">
+          <p className="text-2xs text-muted uppercase tracking-wide mb-1">About this station</p>
+          <p className="text-xs text-muted line-clamp-3 leading-relaxed">
             {meta.stationWiki.extract}
           </p>
         </div>
@@ -335,25 +335,25 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {preset.city && (
               <div>
-                <p className="text-2xs text-zinc-600 uppercase tracking-wide">City</p>
-                <p className="text-xs text-zinc-300 mt-0.5">{preset.city}</p>
+                <p className="text-2xs text-faint uppercase tracking-wide">City</p>
+                <p className="text-xs text-secondary mt-0.5">{preset.city}</p>
               </div>
             )}
             {preset.owner && (
               <div>
-                <p className="text-2xs text-zinc-600 uppercase tracking-wide">Owner</p>
-                <p className="text-xs text-zinc-300 mt-0.5 truncate">{preset.owner}</p>
+                <p className="text-2xs text-faint uppercase tracking-wide">Owner</p>
+                <p className="text-xs text-secondary mt-0.5 truncate">{preset.owner}</p>
               </div>
             )}
             {preset.power && (
               <div>
-                <p className="text-2xs text-zinc-600 uppercase tracking-wide">Power</p>
-                <p className="text-xs text-zinc-300 mt-0.5">{preset.power}</p>
+                <p className="text-2xs text-faint uppercase tracking-wide">Power</p>
+                <p className="text-xs text-secondary mt-0.5">{preset.power}</p>
               </div>
             )}
             {preset.website && (
               <div>
-                <p className="text-2xs text-zinc-600 uppercase tracking-wide">Website</p>
+                <p className="text-2xs text-faint uppercase tracking-wide">Website</p>
                 <a
                   href={`https://${preset.website}`}
                   target="_blank"
@@ -371,7 +371,7 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
       {/* RDS raw data (if we have additional fields beyond what's shown above) */}
       {hasRDS && (rds.pi || rds.pty || rds.tp) && (
         <div className="px-4 pb-3 pt-0">
-          <div className="flex items-center gap-3 text-2xs text-zinc-600">
+          <div className="flex items-center gap-3 text-2xs text-faint">
             {rds.pi && <span>PI: {rds.pi}</span>}
             {rds.pty && <span>PTY: {rds.pty}</span>}
             {rds.tp && <span>TP: {rds.tp}</span>}
@@ -385,8 +385,8 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
 function MetaChip({ label, value, span }: { label: string; value: string; span?: number }) {
   return (
     <div className={`card-inner p-2 ${span === 2 ? 'md:col-span-2' : ''}`}>
-      <p className="text-2xs text-zinc-500 uppercase">{label}</p>
-      <p className="text-xs text-zinc-200 truncate mt-0.5">{value}</p>
+      <p className="text-2xs text-muted uppercase">{label}</p>
+      <p className="text-xs text-secondary truncate mt-0.5">{value}</p>
     </div>
   );
 }

@@ -77,8 +77,8 @@ function Dashboard() {
       {/* ─── Hero ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-50">{getGreeting()}</h1>
-          <p className="text-sm text-zinc-500 mt-1">Your local over-the-air media hub &mdash; Mesa, AZ</p>
+          <h1 className="text-2xl font-bold text-primary">{getGreeting()}</h1>
+          <p className="text-sm text-muted mt-1">Your local over-the-air media hub &mdash; Mesa, AZ</p>
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge label="SDR" connected={status.connected} />
@@ -90,11 +90,11 @@ function Dashboard() {
       {recs?.tv.nowAiring && recs.tv.nowAiring.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-secondary flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-tv animate-pulse" />
               Now on TV
             </h2>
-            <Link to="/guide" className="text-2xs text-zinc-500 hover:text-brand-bright transition-colors">
+            <Link to="/guide" className="text-2xs text-muted hover:text-brand-bright transition-colors">
               Full Guide &rarr;
             </Link>
           </div>
@@ -110,20 +110,20 @@ function Dashboard() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-2xs font-mono text-tv font-semibold">{show.channel}</span>
                       {show.network && (
-                        <span className="text-2xs text-zinc-500">{show.network}</span>
+                        <span className="text-2xs text-muted">{show.network}</span>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-zinc-200 truncate group-hover:text-zinc-50 transition-colors">
+                    <p className="text-sm font-medium text-secondary truncate group-hover:text-primary transition-colors">
                       {show.title}
                     </p>
                     {show.episodeTitle && (
-                      <p className="text-2xs text-zinc-500 truncate mt-0.5">{show.episodeTitle}</p>
+                      <p className="text-2xs text-muted truncate mt-0.5">{show.episodeTitle}</p>
                     )}
                   </div>
-                  <span className="text-2xs text-zinc-600 shrink-0">{show.timeRemaining}m left</span>
+                  <span className="text-2xs text-faint shrink-0">{show.timeRemaining}m left</span>
                 </div>
                 {/* Progress bar */}
-                <div className="mt-2.5 h-1 bg-bg-raised rounded-full overflow-hidden">
+                <div className="mt-2.5 h-1 bg-raised rounded-full overflow-hidden">
                   <div
                     className="h-full bg-tv/60 rounded-full transition-all"
                     style={{ width: `${show.progress}%` }}
@@ -139,11 +139,11 @@ function Dashboard() {
       {recs?.radio.featured && recs.radio.featured.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-secondary flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-radio animate-pulse" />
               Featured Stations
             </h2>
-            <Link to="/fm" className="text-2xs text-zinc-500 hover:text-brand-bright transition-colors">
+            <Link to="/fm" className="text-2xs text-muted hover:text-brand-bright transition-colors">
               All FM &rarr;
             </Link>
           </div>
@@ -156,10 +156,10 @@ function Dashboard() {
               >
                 <StationLogo callsign={station.callsign} size={32} fallbackColor="#8b5cf6" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-zinc-200 group-hover:text-zinc-50 truncate">
+                  <p className="text-xs font-semibold text-secondary group-hover:text-primary truncate">
                     {station.callsign}
                   </p>
-                  <p className="text-2xs text-zinc-500 truncate">
+                  <p className="text-2xs text-muted truncate">
                     {station.freq} &middot; {station.format}
                   </p>
                 </div>
@@ -171,7 +171,7 @@ function Dashboard() {
 
       {/* ─── Quick Access ─────────────────────────────────────────────── */}
       <section>
-        <h2 className="text-sm font-semibold text-zinc-200 mb-3">Tune In</h2>
+        <h2 className="text-sm font-semibold text-secondary mb-3">Tune In</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <QuickCard to="/fm" label="FM Radio" count="26 stations" accent="radio" icon={<WaveIcon />} />
           <QuickCard to="/hd" label="HD Radio" count="27 channels" accent="radio" icon={<HDIcon />} />
@@ -186,8 +186,8 @@ function Dashboard() {
       {news.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-200">Local News</h2>
-            <span className="text-2xs text-zinc-600">Phoenix / Mesa</span>
+            <h2 className="text-sm font-semibold text-secondary">Local News</h2>
+            <span className="text-2xs text-faint">Phoenix / Mesa</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {news.slice(0, 6).map((item, i) => (
@@ -207,13 +207,13 @@ function Dashboard() {
                   />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-zinc-200 group-hover:text-brand-bright transition-colors line-clamp-2 leading-relaxed">
+                  <p className="text-xs font-medium text-secondary group-hover:text-brand-bright transition-colors line-clamp-2 leading-relaxed">
                     {item.title}
                   </p>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-2xs text-zinc-500">{item.source}</span>
+                    <span className="text-2xs text-muted">{item.source}</span>
                     {item.pubDate && (
-                      <span className="text-2xs text-zinc-600">{timeAgo(item.pubDate)}</span>
+                      <span className="text-2xs text-faint">{timeAgo(item.pubDate)}</span>
                     )}
                   </div>
                 </div>
@@ -234,7 +234,7 @@ function Dashboard() {
             <Stat label="ATC" value="25" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-2xs text-zinc-600">{status.device}</span>
+            <span className="text-2xs text-faint">{status.device}</span>
             <div className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-live' : 'bg-danger'}`} />
           </div>
         </div>
@@ -249,7 +249,7 @@ function StatusBadge({ label, connected }: { label: string; connected: boolean }
   return (
     <div className="flex items-center gap-1.5">
       <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-live animate-pulse-live' : 'bg-danger'}`} />
-      <span className="text-2xs text-zinc-500">{label}</span>
+      <span className="text-2xs text-muted">{label}</span>
     </div>
   );
 }
@@ -257,8 +257,8 @@ function StatusBadge({ label, connected }: { label: string; connected: boolean }
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-xs font-mono font-bold text-zinc-200">{value}</span>
-      <span className="text-2xs text-zinc-500">{label}</span>
+      <span className="text-xs font-mono font-bold text-secondary">{value}</span>
+      <span className="text-2xs text-muted">{label}</span>
     </div>
   );
 }
@@ -284,8 +284,8 @@ function QuickCard({ to, label, count, accent, icon }: {
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-zinc-200 group-hover:text-zinc-50 transition-colors truncate">{label}</p>
-          <p className="text-2xs text-zinc-500" dangerouslySetInnerHTML={{ __html: count }} />
+          <p className="text-xs font-semibold text-secondary group-hover:text-primary transition-colors truncate">{label}</p>
+          <p className="text-2xs text-muted" dangerouslySetInnerHTML={{ __html: count }} />
         </div>
       </div>
     </Link>

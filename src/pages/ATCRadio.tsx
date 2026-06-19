@@ -88,13 +88,13 @@ function ATCRadio() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">Air Traffic Control</h2>
-            <p className="text-xs text-zinc-500 font-mono mt-0.5">
+            <p className="text-xs text-muted font-mono mt-0.5">
               118.000 &ndash; 136.975 MHz &middot; Phoenix Terminal Area
             </p>
           </div>
           <div className="flex items-center gap-3">
             {audio.error && <span className="text-xs text-danger mr-2">{audio.error}</span>}
-            {audio.isConnecting && <span className="text-xs text-zinc-500">Tuning...</span>}
+            {audio.isConnecting && <span className="text-xs text-muted">Tuning...</span>}
             <button onClick={togglePower} className={power ? 'btn-danger btn-sm' : 'btn-brand btn-sm'}>
               {power ? 'Power Off' : 'Power On'}
             </button>
@@ -103,7 +103,7 @@ function ATCRadio() {
 
         <div className="flex items-baseline gap-3 mb-6">
           <span className="freq-display">{frequency.toFixed(3)}</span>
-          <span className="text-sm text-zinc-500">MHz</span>
+          <span className="text-sm text-muted">MHz</span>
           {power && audio.isPlaying && (
             <div className="flex items-center gap-1.5 ml-4">
               <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
@@ -119,27 +119,27 @@ function ATCRadio() {
             <input type="number" min={118.0} max={137.0} step={0.025} value={frequency}
               onChange={(e) => setFrequency(Number(Number(e.target.value).toFixed(3)))}
               className="input w-32 font-mono text-center text-sm" />
-            <span className="text-xs text-zinc-100/25">MHz</span>
+            <span className="text-xs text-primary/25">MHz</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-zinc-500">Squelch</span>
+            <span className="text-xs text-muted">Squelch</span>
             <input type="range" min="0" max="200" value={squelch}
               onChange={(e) => setSquelch(Number(e.target.value))}
-              className="w-24 h-1 bg-bg-raised rounded-full appearance-none cursor-pointer
+              className="w-24 h-1 bg-raised rounded-full appearance-none cursor-pointer
                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
                          [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
                          [&::-webkit-slider-thumb]:bg-cyan-400" />
-            <span className="text-xs font-mono text-zinc-500 w-6">{squelch}</span>
+            <span className="text-xs font-mono text-muted w-6">{squelch}</span>
           </div>
           <div className="flex-1 flex items-center gap-3">
-            <span className="text-xs text-zinc-500">Vol</span>
+            <span className="text-xs text-muted">Vol</span>
             <input type="range" min="0" max="100" value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
-              className="flex-1 h-1 bg-bg-raised rounded-full appearance-none cursor-pointer
+              className="flex-1 h-1 bg-raised rounded-full appearance-none cursor-pointer
                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
                          [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
                          [&::-webkit-slider-thumb]:bg-cyan-400" />
-            <span className="text-xs font-mono text-zinc-500 w-8">{volume}%</span>
+            <span className="text-xs font-mono text-muted w-8">{volume}%</span>
           </div>
         </div>
       </div>
@@ -169,11 +169,11 @@ function ATCRadio() {
                 }`}
               >
                 <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[10px] uppercase text-zinc-500 font-medium truncate">{f.label}</span>
+                  <span className="text-[10px] uppercase text-muted font-medium truncate">{f.label}</span>
                   {f.freq === 121.5 && <span className="badge-danger text-[8px]">EMRG</span>}
                 </div>
                 <div className="text-sm font-mono font-medium">{f.freq.toFixed(3)}</div>
-                <div className="text-[9px] text-zinc-100/20 mt-0.5 truncate">{f.desc}</div>
+                <div className="text-[9px] text-primary/20 mt-0.5 truncate">{f.desc}</div>
               </button>
             ))}
           </div>

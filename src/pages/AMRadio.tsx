@@ -70,13 +70,13 @@ function AMRadio() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">AM Broadcast</h2>
-            <p className="text-xs text-zinc-500 font-mono mt-0.5">
+            <p className="text-xs text-muted font-mono mt-0.5">
               530 &ndash; 1700 kHz &middot; Phoenix/Mesa AZ
             </p>
           </div>
           <div className="flex items-center gap-3">
             {audio.error && <span className="text-xs text-danger mr-2">{audio.error}</span>}
-            {audio.isConnecting && <span className="text-xs text-zinc-500">Tuning...</span>}
+            {audio.isConnecting && <span className="text-xs text-muted">Tuning...</span>}
             <button onClick={togglePower} className={power ? 'btn-danger btn-sm' : 'btn-brand btn-sm'}>
               {power ? 'Power Off' : 'Power On'}
             </button>
@@ -85,7 +85,7 @@ function AMRadio() {
 
         <div className="flex items-baseline gap-3 mb-6">
           <span className="freq-display">{frequency}</span>
-          <span className="text-sm text-zinc-500">kHz</span>
+          <span className="text-sm text-muted">kHz</span>
           {power && audio.isPlaying && (
             <div className="flex items-center gap-1.5 ml-4">
               <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
@@ -101,17 +101,17 @@ function AMRadio() {
             <input type="number" min={530} max={1700} step={10} value={frequency}
               onChange={(e) => setFrequency(Math.round(Number(e.target.value)))}
               className="input w-28 font-mono text-center text-sm" />
-            <span className="text-xs text-zinc-100/25">kHz</span>
+            <span className="text-xs text-primary/25">kHz</span>
           </div>
           <div className="flex-1 flex items-center gap-3">
-            <span className="text-xs text-zinc-500">Vol</span>
+            <span className="text-xs text-muted">Vol</span>
             <input type="range" min="0" max="100" value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
-              className="flex-1 h-1 bg-bg-raised rounded-full appearance-none cursor-pointer
+              className="flex-1 h-1 bg-raised rounded-full appearance-none cursor-pointer
                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
                          [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
                          [&::-webkit-slider-thumb]:bg-warning" />
-            <span className="text-xs font-mono text-zinc-500 w-8">{volume}%</span>
+            <span className="text-xs font-mono text-muted w-8">{volume}%</span>
           </div>
         </div>
       </div>
@@ -144,9 +144,9 @@ function AMRadio() {
                 frequency === p.freq ? 'border-warning/30 bg-warning/5' : ''
               }`}
             >
-              <div className="text-[10px] text-zinc-500 mb-0.5 truncate">{p.label}</div>
+              <div className="text-[10px] text-muted mb-0.5 truncate">{p.label}</div>
               <div className="text-xs font-mono font-medium">{p.freq}</div>
-              <div className="text-[9px] text-zinc-100/20 mt-0.5 truncate">{p.format}</div>
+              <div className="text-[9px] text-primary/20 mt-0.5 truncate">{p.format}</div>
             </button>
           ))}
         </div>

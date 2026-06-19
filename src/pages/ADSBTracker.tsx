@@ -66,11 +66,11 @@ function ADSBTracker() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">ADS-B Tracker</h2>
-            <p className="text-xs text-zinc-500 font-mono mt-0.5">1090 MHz &middot; Mode-S Transponder</p>
+            <p className="text-xs text-muted font-mono mt-0.5">1090 MHz &middot; Mode-S Transponder</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500">Aircraft:</span>
+              <span className="text-xs text-muted">Aircraft:</span>
               <span className="text-sm font-mono font-semibold text-emerald-400">{aircraft.length}</span>
             </div>
             <button
@@ -86,7 +86,7 @@ function ADSBTracker() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Radar view */}
         <div className="lg:col-span-2 card p-4">
-          <div className="w-full h-[400px] rounded-lg bg-bg-raised relative overflow-hidden">
+          <div className="w-full h-[400px] rounded-lg bg-raised relative overflow-hidden">
             {/* Grid overlay */}
             <div className="absolute inset-0 opacity-10">
               <div className="absolute inset-0 border border-white/10 rounded-lg" />
@@ -122,7 +122,7 @@ function ADSBTracker() {
               );
             })}
 
-            <div className="absolute bottom-3 left-3 text-[10px] font-mono text-zinc-100/20">
+            <div className="absolute bottom-3 left-3 text-[10px] font-mono text-primary/20">
               {isTracking ? 'LIVE' : 'IDLE'}
             </div>
           </div>
@@ -143,7 +143,7 @@ function ADSBTracker() {
               <InfoRow label="Last Seen" value={`${selected.seen}s ago`} />
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">Click an aircraft on the radar or table below.</p>
+            <p className="text-sm text-muted">Click an aircraft on the radar or table below.</p>
           )}
         </div>
       </div>
@@ -153,7 +153,7 @@ function ADSBTracker() {
         <span className="label">Aircraft List</span>
         <table className="w-full text-sm mt-3">
           <thead>
-            <tr className="text-zinc-500 text-xs border-b border-white/[0.06]">
+            <tr className="text-muted text-xs border-b border-white/[0.06]">
               <th className="text-left py-2 px-3 font-medium">Flight</th>
               <th className="text-left py-2 px-3 font-medium">ICAO</th>
               <th className="text-right py-2 px-3 font-medium">Altitude</th>
@@ -173,12 +173,12 @@ function ADSBTracker() {
                 }`}
               >
                 <td className="py-2.5 px-3 font-mono font-medium">{ac.flight}</td>
-                <td className="py-2.5 px-3 font-mono text-zinc-500">{ac.hex}</td>
+                <td className="py-2.5 px-3 font-mono text-muted">{ac.hex}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{ac.altitude.toLocaleString()}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{ac.speed}</td>
                 <td className="py-2.5 px-3 text-right font-mono">{ac.heading}&deg;</td>
-                <td className="py-2.5 px-3 text-right font-mono text-zinc-500">{ac.squawk}</td>
-                <td className="py-2.5 px-3 text-right text-zinc-500">{ac.seen}s</td>
+                <td className="py-2.5 px-3 text-right font-mono text-muted">{ac.squawk}</td>
+                <td className="py-2.5 px-3 text-right text-muted">{ac.seen}s</td>
               </tr>
             ))}
           </tbody>
@@ -191,8 +191,8 @@ function ADSBTracker() {
 function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex justify-between items-center py-1.5 border-b border-white/[0.04] last:border-0">
-      <span className="text-xs text-zinc-500">{label}</span>
-      <span className={`font-mono text-sm ${highlight ? 'text-emerald-400 font-semibold' : 'text-zinc-200'}`}>{value}</span>
+      <span className="text-xs text-muted">{label}</span>
+      <span className={`font-mono text-sm ${highlight ? 'text-emerald-400 font-semibold' : 'text-secondary'}`}>{value}</span>
     </div>
   );
 }

@@ -69,7 +69,7 @@ function TVGuide() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <span className="text-sm text-zinc-500">Loading TV Guide...</span>
+        <span className="text-sm text-muted">Loading TV Guide...</span>
       </div>
     );
   }
@@ -77,8 +77,8 @@ function TVGuide() {
   if (guide.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-zinc-400">No guide data available.</p>
-        <p className="text-xs text-zinc-600 mt-2">Make sure your HDHomeRun is connected.</p>
+        <p className="text-muted">No guide data available.</p>
+        <p className="text-xs text-faint mt-2">Make sure your HDHomeRun is connected.</p>
         <Link to="/tv" className="btn-brand btn-sm mt-4 inline-flex">Go to Live TV</Link>
       </div>
     );
@@ -97,15 +97,15 @@ function TVGuide() {
       {/* EPG Grid */}
       <div className="card-flush overflow-hidden">
         {/* Time header */}
-        <div className="flex border-b border-bg-border bg-bg-card sticky top-0 z-10">
-          <div className="w-32 md:w-40 shrink-0 p-2 border-r border-bg-border">
-            <span className="text-2xs text-zinc-500">Channel</span>
+        <div className="flex border-b border-border bg-card sticky top-0 z-10">
+          <div className="w-32 md:w-40 shrink-0 p-2 border-r border-border">
+            <span className="text-2xs text-muted">Channel</span>
           </div>
           <div className="flex-1 relative h-8">
             {timeSlots.map((ts) => (
-              <div key={ts} className="absolute top-0 h-full border-l border-bg-border flex items-center pl-2"
+              <div key={ts} className="absolute top-0 h-full border-l border-border flex items-center pl-2"
                 style={{ left: `${getPosition(ts)}%` }}>
-                <span className="text-2xs text-zinc-500 font-mono">{formatTime(ts)}</span>
+                <span className="text-2xs text-muted font-mono">{formatTime(ts)}</span>
               </div>
             ))}
             <div className="absolute top-0 h-full w-0.5 bg-brand z-10" style={{ left: `${getPosition(now)}%` }} />
@@ -115,14 +115,14 @@ function TVGuide() {
         {/* Channel rows */}
         <div ref={gridRef} className="max-h-[calc(100vh-220px)] overflow-y-auto">
           {guide.map((ch) => (
-            <div key={ch.GuideNumber} className="flex border-b border-bg-border last:border-0 hover:bg-bg-hover/30 transition-colors">
+            <div key={ch.GuideNumber} className="flex border-b border-border last:border-0 hover:bg-hover/30 transition-colors">
               {/* Channel label — click to watch */}
               <button
                 onClick={() => watchChannel(ch.GuideNumber)}
-                className="w-32 md:w-40 shrink-0 p-2 border-r border-bg-border flex items-center gap-2 hover:bg-bg-hover/50 transition-colors text-left"
+                className="w-32 md:w-40 shrink-0 p-2 border-r border-border flex items-center gap-2 hover:bg-hover/50 transition-colors text-left"
               >
-                <span className="text-xs font-mono text-zinc-500 w-7">{ch.GuideNumber}</span>
-                <span className="text-xs text-zinc-300 truncate">{ch.GuideName}</span>
+                <span className="text-xs font-mono text-muted w-7">{ch.GuideNumber}</span>
+                <span className="text-xs text-secondary truncate">{ch.GuideName}</span>
               </button>
 
               {/* Programs */}
@@ -139,16 +139,16 @@ function TVGuide() {
                       className={`absolute top-1 bottom-1 rounded px-1.5 text-left overflow-hidden border transition-colors cursor-pointer ${
                         isCurrent
                           ? 'bg-brand/10 border-brand/30 hover:bg-brand/20'
-                          : 'bg-bg-raised border-bg-border hover:bg-bg-hover'
+                          : 'bg-raised border-border hover:bg-hover'
                       }`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                       title={isCurrent ? `${program.Title} — click to watch` : program.Title}
                     >
-                      <span className={`text-2xs truncate block ${isCurrent ? 'text-brand-bright font-medium' : 'text-zinc-400'}`}>
+                      <span className={`text-2xs truncate block ${isCurrent ? 'text-brand-bright font-medium' : 'text-muted'}`}>
                         {program.Title}
                       </span>
                       {program.EpisodeTitle && (
-                        <span className="text-2xs text-zinc-600 truncate block">{program.EpisodeTitle}</span>
+                        <span className="text-2xs text-faint truncate block">{program.EpisodeTitle}</span>
                       )}
                     </button>
                   );
@@ -165,21 +165,21 @@ function TVGuide() {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-mono text-zinc-500">{selectedProgram.channel.GuideNumber}</span>
-                <span className="text-xs text-zinc-400">{selectedProgram.channel.GuideName}</span>
+                <span className="text-xs font-mono text-muted">{selectedProgram.channel.GuideNumber}</span>
+                <span className="text-xs text-muted">{selectedProgram.channel.GuideName}</span>
               </div>
-              <h3 className="text-base font-semibold text-zinc-100">{selectedProgram.program.Title}</h3>
+              <h3 className="text-base font-semibold text-primary">{selectedProgram.program.Title}</h3>
               {selectedProgram.program.EpisodeTitle && (
-                <p className="text-sm text-zinc-400 mt-0.5">{selectedProgram.program.EpisodeTitle}</p>
+                <p className="text-sm text-muted mt-0.5">{selectedProgram.program.EpisodeTitle}</p>
               )}
-              <p className="text-xs text-zinc-500 mt-2">
+              <p className="text-xs text-muted mt-2">
                 {formatTime(selectedProgram.program.StartTime)} &ndash; {formatTime(selectedProgram.program.EndTime)}
               </p>
               {selectedProgram.program.Synopsis && (
-                <p className="text-sm text-zinc-400 mt-3 leading-relaxed">{selectedProgram.program.Synopsis}</p>
+                <p className="text-sm text-muted mt-3 leading-relaxed">{selectedProgram.program.Synopsis}</p>
               )}
             </div>
-            <button onClick={() => setSelectedProgram(null)} className="text-zinc-500 hover:text-zinc-300 p-1">
+            <button onClick={() => setSelectedProgram(null)} className="text-muted hover:text-secondary p-1">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>

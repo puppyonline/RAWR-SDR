@@ -4,15 +4,29 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Dark neutrals
+        // Theme-aware colors (CSS variables)
+        surface: 'var(--color-surface)',
+        raised: 'var(--color-raised)',
+        card: 'var(--color-card)',
+        hover: 'var(--color-hover)',
+        border: 'var(--color-border)',
+        primary: 'var(--color-primary)',
+        secondary: 'var(--color-secondary)',
+        muted: 'var(--color-muted)',
+        faint: 'var(--color-faint)',
+        subtle: 'var(--color-subtle)',
+        invert: 'var(--color-invert)',
+
+        // Keep old bg-* names as aliases for backward compat
         bg: {
-          DEFAULT: '#09090b',
-          raised: '#111114',
-          card: '#16161a',
-          hover: '#1c1c22',
-          border: '#27272a',
+          DEFAULT: 'var(--color-surface)',
+          raised: 'var(--color-raised)',
+          card: 'var(--color-card)',
+          hover: 'var(--color-hover)',
+          border: 'var(--color-border)',
         },
-        // Accent palette
+
+        // Accent palette (static)
         brand: {
           DEFAULT: '#3b82f6',
           dim: '#2563eb',
@@ -23,7 +37,6 @@ export default {
         live: '#22c55e',
         warn: '#f59e0b',
         danger: '#ef4444',
-        muted: '#71717a',
         // Section accents
         radio: '#8b5cf6',
         tv: '#06b6d4',

@@ -222,7 +222,7 @@ function TVPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Live TV</h2>
-            <p className="text-xs text-zinc-500 font-mono mt-0.5">HDHomeRun Flex 4K &middot; OTA Broadcast</p>
+            <p className="text-xs text-muted font-mono mt-0.5">HDHomeRun Flex 4K &middot; OTA Broadcast</p>
           </div>
           <div className="flex items-center gap-3">
             {error && <span className="text-xs text-danger">{error}</span>}
@@ -252,7 +252,7 @@ function TVPage() {
         {/* Channel List */}
         <div className="relative max-h-[28rem] lg:max-h-none">
           <div className="lg:absolute lg:inset-0 card p-0 overflow-hidden flex flex-col">
-            <div className="p-3 border-b border-white/[0.06] bg-bg-card z-10 shrink-0">
+            <div className="p-3 border-b border-white/[0.06] bg-card z-10 shrink-0">
               <span className="label">Channels ({channels.length})</span>
             </div>
             <div className="divide-y divide-white/[0.04] overflow-y-auto flex-1 min-h-0">
@@ -268,15 +268,15 @@ function TVPage() {
                         const logoUrl = meta?.logo || getTVStationLogo(ch.GuideName);
                         if (logoUrl) return <img src={logoUrl} alt="" className="w-6 h-6 object-contain rounded-sm shrink-0" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
                         if (meta) return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0" style={{ backgroundColor: `${meta.color}30`, color: meta.color }}>{meta.network}</span>;
-                        return <div className="w-6 h-6 rounded-sm bg-bg-raised shrink-0" />;
+                        return <div className="w-6 h-6 rounded-sm bg-raised shrink-0" />;
                       })()}
-                      <span className="text-xs font-mono text-zinc-400 w-8">{ch.GuideNumber}</span>
+                      <span className="text-xs font-mono text-muted w-8">{ch.GuideNumber}</span>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{ch.GuideName}</div>
                         {program && (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] text-zinc-500 truncate">{program.Title}</span>
-                            <span className="text-[10px] text-zinc-600 shrink-0">&middot; {Math.ceil((program.EndTime - Math.floor(Date.now() / 1000)) / 60)}m</span>
+                            <span className="text-[11px] text-muted truncate">{program.Title}</span>
+                            <span className="text-[10px] text-faint shrink-0">&middot; {Math.ceil((program.EndTime - Math.floor(Date.now() / 1000)) / 60)}m</span>
                           </div>
                         )}
                       </div>
@@ -285,7 +285,7 @@ function TVPage() {
                 );
               })}
               {channels.length === 0 && (
-                <div className="p-6 text-center text-zinc-500 text-sm">
+                <div className="p-6 text-center text-muted text-sm">
                   {hdhrStatus?.connected ? 'Loading channels...' : 'No HDHomeRun detected'}
                 </div>
               )}
@@ -374,17 +374,17 @@ function PlayerOverlay({ videoRef, isPlaying, isBuffering, selectedChannel, guid
 
       {/* Idle */}
       {!isPlaying && !isBuffering && !selectedChannel && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
+        <div className="absolute inset-0 flex items-center justify-center bg-raised">
           <div className="text-center">
             <div className="text-4xl mb-2 opacity-30">📺</div>
-            <p className="text-sm text-zinc-500">Select a channel to start watching</p>
+            <p className="text-sm text-muted">Select a channel to start watching</p>
           </div>
         </div>
       )}
 
       {/* Buffering */}
       {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
+        <div className="absolute inset-0 flex items-center justify-center bg-raised/95 backdrop-blur-sm">
           <div className="text-center space-y-4">
             <div className="flex items-end justify-center gap-1 h-10">
               {[0, 150, 300, 450, 600, 750, 900].map((delay, i) => (
@@ -393,9 +393,9 @@ function PlayerOverlay({ videoRef, isPlaying, isBuffering, selectedChannel, guid
               ))}
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-200">Tuning to {selectedChannel?.GuideName}</p>
-              <p className="text-xs text-zinc-400 mt-1.5 italic">{loadingBlurb}</p>
-              <p className="text-2xs text-zinc-600 mt-3">This can take up to 10 seconds</p>
+              <p className="text-sm font-medium text-secondary">Tuning to {selectedChannel?.GuideName}</p>
+              <p className="text-xs text-muted mt-1.5 italic">{loadingBlurb}</p>
+              <p className="text-2xs text-faint mt-3">This can take up to 10 seconds</p>
             </div>
           </div>
         </div>
@@ -538,12 +538,12 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-2xs text-tv uppercase tracking-wide font-medium">Now Playing</span>
                   {showInfo.status && (
-                    <span className="text-2xs text-zinc-500">{showInfo.status}</span>
+                    <span className="text-2xs text-muted">{showInfo.status}</span>
                   )}
                 </div>
-                <h3 className="text-lg font-bold text-zinc-100">{showInfo.name}</h3>
+                <h3 className="text-lg font-bold text-primary">{showInfo.name}</h3>
                 {current.EpisodeTitle && (
-                  <p className="text-sm text-zinc-400 mt-0.5">&ldquo;{current.EpisodeTitle}&rdquo;</p>
+                  <p className="text-sm text-muted mt-0.5">&ldquo;{current.EpisodeTitle}&rdquo;</p>
                 )}
 
                 {/* Metadata row */}
@@ -555,19 +555,19 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
                     </span>
                   )}
                   {showInfo.genres.map((g) => (
-                    <span key={g} className="text-xs text-zinc-400 bg-white/[0.04] rounded-md px-2 py-0.5">{g}</span>
+                    <span key={g} className="text-xs text-muted bg-white/[0.04] rounded-md px-2 py-0.5">{g}</span>
                   ))}
                   {showInfo.runtime && (
-                    <span className="text-xs text-zinc-500">{showInfo.runtime} min</span>
+                    <span className="text-xs text-muted">{showInfo.runtime} min</span>
                   )}
                   {showInfo.premiered && (
-                    <span className="text-xs text-zinc-500">Since {showInfo.premiered.split('-')[0]}</span>
+                    <span className="text-xs text-muted">Since {showInfo.premiered.split('-')[0]}</span>
                   )}
                 </div>
 
                 {/* Synopsis */}
                 {showInfo.summary && (
-                  <p className="text-sm text-zinc-400 mt-3 leading-relaxed line-clamp-4">{showInfo.summary}</p>
+                  <p className="text-sm text-muted mt-3 leading-relaxed line-clamp-4">{showInfo.summary}</p>
                 )}
 
                 {/* Link to TVmaze */}
@@ -583,19 +583,19 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
             {/* Cast */}
             {showInfo.cast.length > 0 && (
               <div className="mt-4 pt-4 border-t border-white/[0.04]">
-                <span className="text-2xs text-zinc-500 uppercase tracking-wide">Cast</span>
+                <span className="text-2xs text-muted uppercase tracking-wide">Cast</span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mt-2.5">
                   {showInfo.cast.map((c) => (
                     <div key={c.name} className="flex flex-col items-center text-center">
                       {c.image ? (
                         <img src={c.image} alt={c.name} className="w-12 h-12 rounded-full object-cover ring-1 ring-white/10 mb-1.5" />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-bg-raised ring-1 ring-white/10 mb-1.5 flex items-center justify-center">
-                          <span className="text-xs text-zinc-500">{c.name.charAt(0)}</span>
+                        <div className="w-12 h-12 rounded-full bg-raised ring-1 ring-white/10 mb-1.5 flex items-center justify-center">
+                          <span className="text-xs text-muted">{c.name.charAt(0)}</span>
                         </div>
                       )}
-                      <span className="text-xs text-zinc-300 truncate w-full">{c.name}</span>
-                      <span className="text-2xs text-zinc-600 truncate w-full">{c.character}</span>
+                      <span className="text-xs text-secondary truncate w-full">{c.name}</span>
+                      <span className="text-2xs text-faint truncate w-full">{c.character}</span>
                     </div>
                   ))}
                 </div>
@@ -608,16 +608,16 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
         {current && !showInfo && current.Synopsis && (
           <div className="card p-5">
             <span className="text-2xs text-tv uppercase tracking-wide font-medium">Now Playing</span>
-            <h3 className="text-base font-semibold text-zinc-100 mt-1">{current.Title}</h3>
-            {current.EpisodeTitle && <p className="text-sm text-zinc-400 mt-0.5">{current.EpisodeTitle}</p>}
-            <p className="text-sm text-zinc-400 mt-2 leading-relaxed">{current.Synopsis}</p>
+            <h3 className="text-base font-semibold text-primary mt-1">{current.Title}</h3>
+            {current.EpisodeTitle && <p className="text-sm text-muted mt-0.5">{current.EpisodeTitle}</p>}
+            <p className="text-sm text-muted mt-2 leading-relaxed">{current.Synopsis}</p>
           </div>
         )}
 
         {/* Station/Network Wikipedia info */}
         {(stationWiki || networkWiki) && (
           <div className="card p-5">
-            <span className="text-2xs text-zinc-500 uppercase tracking-wide">About {stationWiki ? channel.GuideName : network}</span>
+            <span className="text-2xs text-muted uppercase tracking-wide">About {stationWiki ? channel.GuideName : network}</span>
             <div className="flex items-start gap-3 mt-2">
               {(stationWiki?.thumbnail || networkWiki?.thumbnail) && (
                 <img
@@ -627,7 +627,7 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
                 />
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-zinc-300 leading-relaxed line-clamp-4">
+                <p className="text-sm text-secondary leading-relaxed line-clamp-4">
                   {stationWiki?.extract || networkWiki?.extract}
                 </p>
                 {(stationWiki?.url || networkWiki?.url) && (
@@ -655,18 +655,18 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
                   <div key={i} className="card-inner p-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-zinc-200 truncate">{prog.Title}</p>
+                        <p className="text-sm font-medium text-secondary truncate">{prog.Title}</p>
                         {prog.EpisodeTitle && (
-                          <p className="text-2xs text-zinc-500 truncate mt-0.5">{prog.EpisodeTitle}</p>
+                          <p className="text-2xs text-muted truncate mt-0.5">{prog.EpisodeTitle}</p>
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs text-zinc-400 font-mono">{formatTime(prog.StartTime)}</p>
-                        <p className="text-2xs text-zinc-600">{duration} min</p>
+                        <p className="text-xs text-muted font-mono">{formatTime(prog.StartTime)}</p>
+                        <p className="text-2xs text-faint">{duration} min</p>
                       </div>
                     </div>
                     {prog.Synopsis && (
-                      <p className="text-2xs text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">{prog.Synopsis}</p>
+                      <p className="text-2xs text-muted mt-1.5 line-clamp-2 leading-relaxed">{prog.Synopsis}</p>
                     )}
                   </div>
                 );
@@ -696,8 +696,8 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-1">
-      <span className="text-2xs text-zinc-500">{label}</span>
-      <span className="text-xs text-zinc-300">{value}</span>
+      <span className="text-2xs text-muted">{label}</span>
+      <span className="text-xs text-secondary">{value}</span>
     </div>
   );
 }

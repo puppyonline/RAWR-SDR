@@ -65,7 +65,7 @@ function SpectrumVisualizer({ getFrequencyData, isActive, color = '#3b82f6', hei
     <canvas
       ref={canvasRef}
       style={{ height: `${height}px` }}
-      className="w-full rounded-lg bg-bg-raised"
+      className="w-full rounded-lg bg-raised"
     />
   );
 }
