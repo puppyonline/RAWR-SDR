@@ -72,37 +72,43 @@ export function useAudioStream() {
     // Create gain node if needed — start at 50% to avoid hot output
     if (!gainNodeRef.current || gainNodeRef.current.context !== ctx) {
       gainNodeRef.current = ctx.createGain();
-      gainNodeRef.current.gain.value = 0.25; // default output level (quadratic 50%)
+      gainNodeRef.current.gain.value = 0.5; // default 70% volume
       gainNodeRef.current.connect(ctx.destination);
     }
 
-    // Create low-pass filter cascade to kill 19kHz pilot tone
-    // Two cascaded biquads at 14kHz give ~-40dB attenuation at 19kHz
-    // (single biquad only gives ~-12dB which isn't enough)
+    // De-emphasis and pilot filtering chain
     if (!filterRef.current || filterRef.current.context !== ctx) {
-      // De-emphasis filter: FM broadcast uses 75µs pre-emphasis (NA)
-      // This is a 6dB/oct rolloff above ~2122 Hz (1/(2π×75µs))
-      // Implemented as a highshelf at 2122 Hz with -10dB gain
-      const deemph = ctx.createBiquadFilter();
-      deemph.type = 'highshelf';
-      deemph.frequency.value = 2122;
-      deemph.gain.value = -10;
+      // FM de-emphasis: 75µs time constant (North America)
+      // Instead of a single aggressive shelf, use two gentler stages:
+      // 1. Highshelf at 3500Hz -6dB (tames upper presence/sibilance)
+      // 2. Highshelf at 8000Hz -4dB (rolls off remaining brightness)
+      // This approximates the 75µs curve without crushing the vocal range
+      const deemph1 = ctx.createBiquadFilter();
+      deemph1.type = 'highshelf';
+      deemph1.frequency.value = 3500;
+      deemph1.gain.value = -6;
+
+      const deemph2 = ctx.createBiquadFilter();
+      deemph2.type = 'highshelf';
+      deemph2.frequency.value = 8000;
+      deemph2.gain.value = -4;
 
       // Pilot tone removal: cascaded lowpass at 14kHz
-      const filter1 = ctx.createBiquadFilter();
-      filter1.type = 'lowpass';
-      filter1.frequency.value = 14000;
-      filter1.Q.value = 0.54;
+      const lpf1 = ctx.createBiquadFilter();
+      lpf1.type = 'lowpass';
+      lpf1.frequency.value = 14000;
+      lpf1.Q.value = 0.54;
 
-      const filter2 = ctx.createBiquadFilter();
-      filter2.type = 'lowpass';
-      filter2.frequency.value = 14000;
-      filter2.Q.value = 1.31;
+      const lpf2 = ctx.createBiquadFilter();
+      lpf2.type = 'lowpass';
+      lpf2.frequency.value = 14000;
+      lpf2.Q.value = 1.31;
 
-      deemph.connect(filter1);
-      filter1.connect(filter2);
-      filter2.connect(gainNodeRef.current);
-      filterRef.current = deemph;
+      deemph1.connect(deemph2);
+      deemph2.connect(lpf1);
+      lpf1.connect(lpf2);
+      lpf2.connect(gainNodeRef.current);
+      filterRef.current = deemph1;
     }
   }, []);
 
@@ -127,11 +133,10 @@ export function useAudioStream() {
       if (!(event.data instanceof ArrayBuffer)) return;
 
       // rtl_fm outputs signed 16-bit little-endian PCM at 48kHz
-      // Scale down by 0.5 to prevent hot output (rtl_fm can output near full-scale)
       const int16 = new Int16Array(event.data);
       const float32 = new Float32Array(int16.length);
       for (let i = 0; i < int16.length; i++) {
-        float32[i] = (int16[i] / 32768) * 0.5;
+        float32[i] = int16[i] / 32768;
       }
 
       bufferQueueRef.current.push(float32);
