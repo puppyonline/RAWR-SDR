@@ -268,16 +268,17 @@ app.post('/api/tune', async (req, res) => {
 
     } else if (mode === 'atc') {
       // === ATC: AM demod on VHF airband (118-137 MHz) ===
-      // Aviation uses AM with 8.33/25 kHz channel spacing.
-      // E4000 is very sensitive in VHF — lower gain to avoid overload.
-      // Use 12.5k output rate for narrow AM, then upsample to 48k.
+      // Aviation uses AM with 25 kHz channel spacing.
+      // E4000 gain must be LOW for airband — ATCO2 project recommends ~15.
+      // DC offset removal (-E dc) is critical for AM demod quality.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'am',
         '-f', `${frequency}M`,
         '-s', '48k',
+        '-g', '14',
         '-l', '0',
-        '-g', '21',
+        '-E', 'dc',
       ];
 
       console.log(`[RAWR-SDR] ATC: ${rtlFm} ${args.join(' ')}`);
