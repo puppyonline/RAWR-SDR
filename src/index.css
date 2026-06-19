@@ -10,7 +10,11 @@
   }
 
   body {
-    @apply bg-surface text-primary antialiased font-sans;
+    background-color: var(--color-surface);
+    color: var(--color-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
   /* Theme: Dark (default) */
@@ -62,14 +66,14 @@
   }
 
   ::-webkit-scrollbar {
-    @apply w-1.5;
+    width: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full;
     background-color: rgba(113, 113, 122, 0.3);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
     background-color: rgba(113, 113, 122, 0.5);
@@ -79,13 +83,20 @@
 @layer components {
   /* Cards */
   .card {
-    @apply bg-card border border-edge rounded-xl;
+    background-color: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
   }
   .card-flush {
-    @apply bg-card border border-edge rounded-xl overflow-hidden;
+    background-color: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    overflow: hidden;
   }
   .card-inner {
-    @apply bg-raised border border-edge rounded-lg;
+    background-color: var(--color-raised);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
   }
 
   /* Buttons */
@@ -98,10 +109,12 @@
     @apply btn bg-brand hover:bg-brand-dim text-white;
   }
   .btn-ghost {
-    @apply btn text-secondary bg-hover;
+    @apply btn;
+    color: var(--color-secondary);
+    background-color: var(--color-hover);
   }
   .btn-ghost:hover {
-    @apply bg-edge;
+    background-color: var(--color-border);
   }
   .btn-danger {
     @apply btn bg-danger/10 hover:bg-danger/20 text-danger border border-danger/20;
@@ -112,15 +125,25 @@
 
   /* Inputs */
   .input {
-    @apply w-full px-3 py-2 bg-raised border border-edge rounded-lg
-           text-sm text-primary placeholder-muted
+    @apply w-full px-3 py-2 rounded-lg text-sm
            focus:outline-none focus:border-brand/50 focus:ring-1 focus:ring-brand/20
            transition-colors duration-150;
+    background-color: var(--color-raised);
+    border: 1px solid var(--color-border);
+    color: var(--color-primary);
+  }
+  .input::placeholder {
+    color: var(--color-muted);
   }
 
   /* Labels */
   .label {
-    @apply text-2xs font-semibold text-faint uppercase tracking-widest;
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-faint);
   }
 
   /* Badges */
@@ -136,25 +159,31 @@
 
   /* Nav */
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-           text-muted hover:text-primary hover:bg-hover
-           transition-all duration-150 cursor-pointer;
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer;
+    color: var(--color-muted);
+  }
+  .nav-item:hover {
+    color: var(--color-primary);
+    background-color: var(--color-hover);
   }
   .nav-item-active {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm
-           text-primary bg-brand/10 border border-brand/20 font-medium;
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-brand/10 border border-brand/20;
+    color: var(--color-primary);
   }
 
   /* Frequency display */
   .freq-display {
-    @apply text-4xl font-mono font-bold tracking-tight text-primary;
+    @apply text-4xl font-mono font-bold tracking-tight;
+    color: var(--color-primary);
   }
 
   /* Section headers */
   .section-title {
-    @apply text-lg font-semibold text-primary;
+    @apply text-lg font-semibold;
+    color: var(--color-primary);
   }
   .section-subtitle {
-    @apply text-xs text-muted font-mono;
+    @apply text-xs font-mono;
+    color: var(--color-muted);
   }
 }
