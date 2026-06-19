@@ -183,18 +183,20 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   const ffmpeg = spawn(ffmpegPath, [
     '-fflags', 'nobuffer',
     '-flags', 'low_delay',
-    '-analyzeduration', '1000000', // 1s analysis (slightly more than before for stability)
+    '-analyzeduration', '1000000',
     '-probesize', '1000000',
     '-i', streamUrl,
+    '-vf', 'yadif=1',             // deinterlace (ATSC is interlaced)
     '-c:v', 'libx264',
-    '-preset', 'superfast',      // one step up from ultrafast for smoother output
+    '-preset', 'superfast',
     '-tune', 'zerolatency',
     '-profile:v', 'baseline',
     '-level', '3.1',
-    '-b:v', '2500k',             // fixed bitrate prevents spikes
+    '-r', '30',                    // force constant 30fps output
+    '-b:v', '2500k',
     '-maxrate', '3000k',
     '-bufsize', '4000k',
-    '-g', '60',                  // keyframe every 2s (smoother than every 1s)
+    '-g', '60',
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',

@@ -104,13 +104,11 @@ function TVPage() {
       url: `${window.location.origin}/api/hdhr/stream/${channel.GuideNumber}`,
     }, {
       enableWorker: true,
-      liveBufferLatencyChasing: true,
-      liveBufferLatencyMaxLatency: 8,     // allow up to 8s buffer
-      liveBufferLatencyMinRemain: 2,      // keep at least 2s buffered
-      liveBufferLatencyChasingSpeed: 1.2, // gentle catch-up speed
+      liveBufferLatencyChasing: false,    // disable — causes back-and-forth judder
       autoCleanupSourceBuffer: true,
-      autoCleanupMaxBackwardDuration: 30,
-      autoCleanupMinBackwardDuration: 15,
+      autoCleanupMaxBackwardDuration: 60,
+      autoCleanupMinBackwardDuration: 30,
+      fixAudioTimestampGap: true,
     });
 
     player.attachMediaElement(video);
