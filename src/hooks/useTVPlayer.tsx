@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect, ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -21,9 +21,12 @@ interface TVPlayerContextType {
   state: TVPlayerState;
   tuneChannel: (channel: TVChannel) => Promise<void>;
   stopPlayback: () => void;
+  videoElementId: string;
 }
 
 const TVPlayerCtx = createContext<TVPlayerContextType | null>(null);
+
+const VIDEO_ELEMENT_ID = 'airwave-tv-video';
 
 // ─── Loading blurbs ────────────────────────────────────────────────────────
 
@@ -54,7 +57,7 @@ export function TVPlayerProvider({ children }: { children: ReactNode }) {
     loadingBlurb: '',
   });
 
-  const videoRef = useRef<HTMLVideoElement>(null!);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
   const blurbInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const location = useLocation();
@@ -76,6 +79,7 @@ export function TVPlayerProvider({ children }: { children: ReactNode }) {
   }, [state.isBuffering]);
 
   const tuneChannel = useCallback(async (channel: TVChannel) => {
+    // Destroy previous player
     if (playerRef.current) {
       playerRef.current.destroy();
       playerRef.current = null;
@@ -89,8 +93,8 @@ export function TVPlayerProvider({ children }: { children: ReactNode }) {
       loadingBlurb: loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)],
     });
 
-    // Small delay to ensure video element is visible/mounted
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait a tick for React to render the video visible
+    await new Promise((r) => setTimeout(r, 100));
 
     const mpegts = await import('mpegts.js');
     if (!mpegts.default.isSupported()) {
@@ -155,51 +159,79 @@ export function TVPlayerProvider({ children }: { children: ReactNode }) {
     return () => { if (playerRef.current) playerRef.current.destroy(); };
   }, []);
 
-  // Determine mini-player visibility: show when playing and NOT on the TV page
+  // Show mini-player when playing and NOT on TV page
   const showMiniPlayer = hasPlayback && !isOnTVPage;
 
   return (
-    <TVPlayerCtx.Provider value={{ state, tuneChannel, stopPlayback }}>
+    <TVPlayerCtx.Provider value={{ state, tuneChannel, stopPlayback, videoElementId: VIDEO_ELEMENT_ID }}>
       {children}
 
       {/* 
-        Single video element — always mounted, never destroyed.
-        On TV page: hidden here (TV page renders its own view of the same stream via ID).
-        On other pages: shown as a mini-player if actively playing.
+        Single video element — NEVER unmounted, NEVER moved in the DOM.
+        Visibility/size is controlled purely via CSS classes.
+        - On TV page: invisible here (TV page shows it via a portal-like CSS trick)
+        - On other pages with playback: mini-player in bottom-right
+        - No playback: completely hidden
       */}
       <div
-        id="tv-player-root"
+        id="tv-player-container"
         className={
           isOnTVPage
-            ? 'fixed top-0 left-0 w-0 h-0 overflow-hidden pointer-events-none'
+            ? 'fixed top-0 left-0 w-px h-px overflow-hidden opacity-0 pointer-events-none -z-50'
             : showMiniPlayer
-              ? 'fixed bottom-4 right-4 z-50 w-80 aspect-video rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-black group'
-              : 'fixed top-0 left-0 w-0 h-0 overflow-hidden pointer-events-none'
+              ? 'fixed bottom-4 right-4 z-50 w-80 aspect-video rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-black group cursor-pointer'
+              : 'fixed top-0 left-0 w-px h-px overflow-hidden opacity-0 pointer-events-none -z-50'
         }
       >
-        <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted={false} />
+        <video
+          ref={videoRef}
+          id={VIDEO_ELEMENT_ID}
+          className="w-full h-full object-contain bg-black"
+          autoPlay
+          playsInline
+          muted={false}
+        />
 
-        {/* Mini-player overlay (only visible on hover when mini) */}
+        {/* Mini-player hover overlay */}
         {showMiniPlayer && (
-          <div className="absolute inset-0 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <div className="bg-gradient-to-b from-black/80 to-transparent p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-tv font-bold">{state.selectedChannel?.GuideNumber}</span>
-                <span className="text-sm text-white font-medium truncate">{state.selectedChannel?.GuideName}</span>
-              </div>
-            </div>
-            <div className="bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center justify-between">
-              <a href="/tv" className="text-xs text-white/70 hover:text-white">
-                Expand ↗
-              </a>
-              <button onClick={stopPlayback} className="text-white/60 hover:text-red-400 transition-colors">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-              </button>
-            </div>
-          </div>
+          <MiniPlayerOverlay
+            channel={state.selectedChannel}
+            onStop={stopPlayback}
+          />
         )}
       </div>
     </TVPlayerCtx.Provider>
+  );
+}
+
+function MiniPlayerOverlay({ channel, onStop }: { channel: TVChannel | null; onStop: () => void }) {
+  const navigate = useNavigate();
+
+  return (
+    <div className="absolute inset-0 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div className="bg-gradient-to-b from-black/80 to-transparent p-3">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-tv animate-pulse" />
+          <span className="text-xs font-mono text-tv font-bold">{channel?.GuideNumber}</span>
+          <span className="text-sm text-white font-medium truncate">{channel?.GuideName}</span>
+        </div>
+      </div>
+      <div className="bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center justify-between">
+        <button
+          onClick={(e) => { e.stopPropagation(); navigate('/tv'); }}
+          className="text-xs text-white/70 hover:text-white transition-colors flex items-center gap-1"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></svg>
+          Expand
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onStop(); }}
+          className="text-white/60 hover:text-red-400 transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -209,14 +241,4 @@ export function useTVPlayer() {
   const ctx = useContext(TVPlayerCtx);
   if (!ctx) throw new Error('useTVPlayer must be used within TVPlayerProvider');
   return ctx;
-}
-
-/**
- * Get a reference to the shared video element (for the TV page to display inline).
- * Call this from the TV page to grab the video element from the provider's DOM.
- */
-export function getTVVideoElement(): HTMLVideoElement | null {
-  const root = document.getElementById('tv-player-root');
-  if (!root) return null;
-  return root.querySelector('video');
 }

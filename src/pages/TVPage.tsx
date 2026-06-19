@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
 import { useTVShowInfo } from '../hooks/useMetadata';
-import { useTVPlayer, getTVVideoElement } from '../hooks/useTVPlayer';
+import { useTVPlayer } from '../hooks/useTVPlayer';
 import type { TVChannel } from '../hooks/useTVPlayer';
 
 interface Channel {
@@ -26,7 +26,6 @@ interface GuideChannel {
   Guide?: GuideEntry[];
 }
 
-// Phoenix OTA channel metadata
 const channelMeta: Record<string, { network: string; color: string; logo?: string }> = {
   '3': { network: 'IND', color: '#6366f1' },
   '5': { network: 'CBS', color: '#2563eb', logo: tvNetworkLogos['CBS'] },
@@ -45,37 +44,10 @@ function TVPage() {
   const [guide, setGuide] = useState<GuideChannel[]>([]);
   const [hdhrStatus, setHdhrStatus] = useState<any>(null);
   const [localError, setLocalError] = useState('');
-  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const { state, tuneChannel, stopPlayback } = useTVPlayer();
   const { selectedChannel, isPlaying, isBuffering, error, loadingBlurb } = state;
 
-  // Move the shared video element into our container
-  useEffect(() => {
-    const grabVideo = () => {
-      const video = getTVVideoElement();
-      const container = videoContainerRef.current;
-      if (video && container && video.parentElement !== container) {
-        video.className = 'w-full h-full';
-        container.appendChild(video);
-      }
-    };
-    grabVideo();
-    // Retry after a short delay in case of race conditions
-    const timer = setTimeout(grabVideo, 100);
-    return () => {
-      clearTimeout(timer);
-      // Move video back to the provider root
-      const video = getTVVideoElement() || videoContainerRef.current?.querySelector('video');
-      const root = document.getElementById('tv-player-root');
-      if (video && root && video.parentElement !== root) {
-        video.className = 'w-full h-full object-cover';
-        root.appendChild(video);
-      }
-    };
-  }, []);
-
-  // Fetch lineup and status
   useEffect(() => {
     const init = async () => {
       await new Promise((r) => setTimeout(r, 300));
@@ -86,6 +58,20 @@ function TVPage() {
     init();
   }, []);
 
+  // On mount, make the provider's video container visible and positioned
+  // inside our player area. On unmount, hide it again.
+  useEffect(() => {
+    const container = document.getElementById('tv-player-container');
+    if (container) {
+      container.setAttribute('data-tv-page', 'true');
+    }
+    return () => {
+      if (container) {
+        container.removeAttribute('data-tv-page');
+      }
+    };
+  }, []);
+
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/hdhr/status');
@@ -94,8 +80,7 @@ function TVPage() {
       if (!data?.connected) {
         setTimeout(async () => {
           const retry = await fetch('/api/hdhr/status');
-          const d = await retry.json();
-          setHdhrStatus(d);
+          setHdhrStatus(await retry.json());
         }, 2000);
       }
     } catch { setHdhrStatus(null); }
@@ -106,22 +91,14 @@ function TVPage() {
       const res = await fetch('/api/hdhr/lineup');
       if (!res.ok) throw new Error('Failed to get lineup');
       const data = await res.json();
-      const filtered = data.filter((ch: any) => {
-        if (parseFloat(ch.GuideNumber) >= 100) return false;
-        if (ch.DRM) return false;
-        return true;
-      });
-      setChannels(filtered);
-    } catch (err: any) {
-      setLocalError(err.message);
-    }
+      setChannels(data.filter((ch: any) => parseFloat(ch.GuideNumber) < 100 && !ch.DRM));
+    } catch (err: any) { setLocalError(err.message); }
   };
 
   const fetchGuide = async () => {
     try {
       const res = await fetch('/api/hdhr/guide');
-      if (!res.ok) return;
-      setGuide(await res.json());
+      if (res.ok) setGuide(await res.json());
     } catch {}
   };
 
@@ -157,10 +134,9 @@ function TVPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Video Player with Overlay */}
+        {/* Video Player */}
         <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col">
-          <VideoPlayerOverlay
-            videoContainerRef={videoContainerRef}
+          <PlayerArea
             isPlaying={isPlaying}
             isBuffering={isBuffering}
             selectedChannel={selectedChannel}
@@ -182,15 +158,9 @@ function TVPage() {
                 const program = getCurrentProgram(ch.GuideNumber);
                 const meta = channelMeta[ch.GuideNumber.split('.')[0]];
                 const isActive = selectedChannel?.GuideNumber === ch.GuideNumber;
-
                 return (
-                  <button
-                    key={ch.GuideNumber}
-                    onClick={() => handleTune(ch)}
-                    className={`w-full text-left px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${
-                      isActive ? 'bg-brand/5 border-l-2 border-brand' : ''
-                    }`}
-                  >
+                  <button key={ch.GuideNumber} onClick={() => handleTune(ch)}
+                    className={`w-full text-left px-3 py-2.5 hover:bg-white/[0.03] transition-colors ${isActive ? 'bg-brand/5 border-l-2 border-brand' : ''}`}>
                     <div className="flex items-center gap-3">
                       {(() => {
                         const logoUrl = meta?.logo || getTVStationLogo(ch.GuideName);
@@ -225,10 +195,11 @@ function TVPage() {
   );
 }
 
-// ─── Video Player Overlay Component ──────────────────────────────────────────
+// ─── Player Area (contains the video + overlay) ──────────────────────────────
+// The actual <video> element lives in the provider. This component just shows
+// it via an iframe-like "window" by making the provider container visible here.
 
-function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
-  videoContainerRef: React.RefObject<HTMLDivElement>;
+function PlayerArea({ isPlaying, isBuffering, selectedChannel, guide, channelMeta, loadingBlurb, onStop }: {
   isPlaying: boolean;
   isBuffering: boolean;
   selectedChannel: TVChannel | null;
@@ -237,11 +208,72 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
   loadingBlurb: string;
   onStop: () => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [, setTick] = useState(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Position the provider's video container to fill this area
+  useEffect(() => {
+    const positionVideo = () => {
+      const wrapper = wrapperRef.current;
+      const container = document.getElementById('tv-player-container');
+      if (!wrapper || !container) return;
+
+      const rect = wrapper.getBoundingClientRect();
+      Object.assign(container.style, {
+        position: 'fixed',
+        top: `${rect.top}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+        opacity: '1',
+        pointerEvents: 'none',
+        zIndex: '1',
+        overflow: 'hidden',
+        borderRadius: '0',
+      });
+      // Remove the classes that hide it
+      container.className = '';
+    };
+
+    positionVideo();
+    window.addEventListener('resize', positionVideo);
+    window.addEventListener('scroll', positionVideo);
+
+    // Reposition periodically in case of layout shifts
+    const interval = setInterval(positionVideo, 500);
+
+    return () => {
+      window.removeEventListener('resize', positionVideo);
+      window.removeEventListener('scroll', positionVideo);
+      clearInterval(interval);
+      // Reset container to hidden
+      const container = document.getElementById('tv-player-container');
+      if (container) {
+        container.style.cssText = '';
+        container.className = 'fixed top-0 left-0 w-px h-px overflow-hidden opacity-0 pointer-events-none -z-50';
+      }
+    };
+  }, []);
+
+  // Handle fullscreen — when fullscreen, make the container fill the screen
+  useEffect(() => {
+    const container = document.getElementById('tv-player-container');
+    if (!container) return;
+
+    if (isFullscreen) {
+      Object.assign(container.style, {
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        zIndex: '9999',
+        borderRadius: '0',
+      });
+    }
+  }, [isFullscreen]);
 
   const now = Math.floor(Date.now() / 1000);
   const guideChannel = selectedChannel ? guide.find((g) => g.GuideNumber === selectedChannel.GuideNumber) : null;
@@ -249,9 +281,7 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
   const current = entries.find((e) => e.StartTime <= now && e.EndTime > now);
   const next = entries.find((e) => e.StartTime > now);
   const network = selectedChannel ? channelMeta[selectedChannel.GuideNumber.split('.')[0]]?.network : undefined;
-
   const showInfo = useTVShowInfo(current?.Title);
-
   const progress = current ? Math.min(100, Math.round(((now - current.StartTime) / (current.EndTime - current.StartTime)) * 100)) : 0;
   const timeRemaining = current ? Math.max(0, Math.ceil((current.EndTime - now) / 60)) : 0;
   const formatTime = (epoch: number) => new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -275,31 +305,29 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
   }, []);
 
   const toggleFullscreen = () => {
-    if (!containerRef.current) return;
+    const container = document.getElementById('tv-player-container');
+    if (!container) return;
     if (document.fullscreenElement) document.exitFullscreen();
-    else containerRef.current.requestFullscreen();
+    else container.requestFullscreen();
   };
 
   const togglePlayPause = () => {
-    const video = videoContainerRef.current?.querySelector('video');
+    const video = document.getElementById('airwave-tv-video') as HTMLVideoElement | null;
     if (!video) return;
     if (video.paused) video.play(); else video.pause();
   };
 
   return (
     <div
-      ref={containerRef}
-      className={`relative bg-black flex items-center justify-center ${isFullscreen ? 'w-screen h-screen' : 'aspect-video'}`}
+      ref={wrapperRef}
+      className="relative aspect-video bg-black"
       onMouseMove={revealOverlay}
       onMouseEnter={revealOverlay}
       onClick={revealOverlay}
     >
-      {/* Video element mount point */}
-      <div ref={videoContainerRef} className="w-full h-full" />
-
-      {/* Idle */}
+      {/* Idle state */}
       {!isPlaying && !isBuffering && !selectedChannel && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised z-10">
           <div className="text-center">
             <div className="text-4xl mb-2 opacity-30">📺</div>
             <p className="text-sm text-zinc-500">Select a channel to start watching</p>
@@ -309,7 +337,7 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
 
       {/* Buffering */}
       {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
+        <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm z-10">
           <div className="text-center space-y-4">
             <div className="flex items-end justify-center gap-1 h-10">
               {[0, 150, 300, 450, 600, 750, 900].map((delay, i) => (
@@ -328,8 +356,7 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
 
       {/* Overlay */}
       {isPlaying && selectedChannel && (
-        <div className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none ${showOverlay ? 'opacity-100' : 'opacity-0'}`}>
-          {/* Top */}
+        <div className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 z-20 pointer-events-none ${showOverlay ? 'opacity-100' : 'opacity-0'}`}>
           <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-5 pointer-events-auto">
             <div className="flex items-center gap-2.5">
               <span className="text-base font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
@@ -338,7 +365,6 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
             </div>
           </div>
 
-          {/* Bottom */}
           <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-16 pb-5 px-5 pointer-events-auto">
             {current && (
               <div className="flex items-end gap-4 mb-4">
@@ -377,13 +403,11 @@ function VideoPlayerOverlay({ videoContainerRef, isPlaying, isBuffering, selecte
                 </div>
               </div>
             )}
-
             {current && (
               <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mb-4 cursor-pointer group">
                 <div className="h-full bg-tv rounded-full transition-all duration-1000 group-hover:bg-tv/90" style={{ width: `${progress}%` }} />
               </div>
             )}
-
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <button onClick={togglePlayPause} className="text-white/90 hover:text-white transition-colors hover:scale-110 active:scale-95">
