@@ -83,8 +83,8 @@ function FMRadio() {
   };
 
   return (
-    <div className="space-y-4 max-w-6xl">
-      <div className="card p-6">
+    <div className="space-y-3">
+      <div className="card p-5">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-lg font-semibold">FM Broadcast</h2>
@@ -137,7 +137,7 @@ function FMRadio() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
           <span className="label">Spectrum</span>
-          <div className="mt-3"><SpectrumVisualizer isActive={power && audio.isPlaying} color="#6366f1" height={140} /></div>
+          <div className="mt-3"><SpectrumVisualizer isActive={power && audio.isPlaying} color="#6366f1" height={100} /></div>
         </div>
         <div className="card p-5">
           <span className="label">Signal</span>

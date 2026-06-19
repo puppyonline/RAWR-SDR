@@ -61,7 +61,7 @@ function ADSBTracker() {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl">
+    <div className="space-y-3">
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <div>

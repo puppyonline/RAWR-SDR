@@ -13,7 +13,7 @@ function Dashboard() {
   const status = useSDRStatus();
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-4">
       {/* Device overview */}
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
