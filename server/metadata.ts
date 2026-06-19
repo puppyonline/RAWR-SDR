@@ -136,7 +136,7 @@ router.get('/tv/show', async (req: Request, res: Response) => {
   const zeamInfo = await lookupZeamShow(title);
   if (zeamInfo) return res.json(zeamInfo);
 
-  res.status(404).json({ error: 'Show not found' });
+  res.json(null);
 });
 
 // ─── Zeam: Local Show Metadata (scraped from embedded JSON) ────────────────
@@ -314,7 +314,7 @@ router.get('/track', async (req: Request, res: Response) => {
   if (!artist && !title) return res.status(400).json({ error: 'artist and/or title required' });
 
   const info = await lookupTrack(artist || '', title || '');
-  if (!info) return res.status(404).json({ error: 'Track not found' });
+  if (!info) return res.json(null);
   res.json(info);
 });
 
@@ -367,7 +367,7 @@ router.get('/artist', async (req: Request, res: Response) => {
   if (!name) return res.status(400).json({ error: 'name param required' });
 
   const info = await lookupArtist(name);
-  if (!info) return res.status(404).json({ error: 'Artist not found' });
+  if (!info) return res.json(null);
   res.json(info);
 });
 
@@ -404,7 +404,7 @@ router.get('/albumart', async (req: Request, res: Response) => {
   if (!artist || !album) return res.status(400).json({ error: 'artist and album required' });
 
   const url = await lookupAlbumArt(artist, album);
-  if (!url) return res.status(404).json({ error: 'Album art not found' });
+  if (!url) return res.json(null);
   res.json({ url });
 });
 
@@ -489,7 +489,7 @@ router.get('/wiki', async (req: Request, res: Response) => {
   if (!q) return res.status(400).json({ error: 'q param required' });
 
   const info = await lookupWikipedia(q, context);
-  if (!info) return res.status(404).json({ error: 'No Wikipedia article found' });
+  if (!info) return res.json(null);
   res.json(info);
 });
 
@@ -556,7 +556,7 @@ router.get('/station', async (req: Request, res: Response) => {
   if (!callsign) return res.status(400).json({ error: 'callsign param required' });
 
   const info = await lookupRadioStation(callsign);
-  if (!info) return res.status(404).json({ error: 'Station not found' });
+  if (!info) return res.json(null);
   res.json(info);
 });
 
