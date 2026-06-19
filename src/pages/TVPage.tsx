@@ -105,8 +105,12 @@ function TVPage() {
     }, {
       enableWorker: true,
       liveBufferLatencyChasing: true,
-      liveBufferLatencyMaxLatency: 3,
-      liveBufferLatencyMinRemain: 0.5,
+      liveBufferLatencyMaxLatency: 8,     // allow up to 8s buffer
+      liveBufferLatencyMinRemain: 2,      // keep at least 2s buffered
+      liveBufferLatencyChasingSpeed: 1.2, // gentle catch-up speed
+      autoCleanupSourceBuffer: true,
+      autoCleanupMaxBackwardDuration: 30,
+      autoCleanupMinBackwardDuration: 15,
     });
 
     player.attachMediaElement(video);

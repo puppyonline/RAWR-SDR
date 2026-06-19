@@ -181,24 +181,29 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
 
   // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
   const ffmpeg = spawn(ffmpegPath, [
-    '-fflags', 'nobuffer',       // don't buffer input
-    '-flags', 'low_delay',       // minimize delay
-    '-analyzeduration', '500000', // analyze only 0.5s of input (default is 5s)
-    '-probesize', '500000',      // probe only 500KB (default is 5MB)
+    '-fflags', 'nobuffer',
+    '-flags', 'low_delay',
+    '-analyzeduration', '1000000', // 1s analysis (slightly more than before for stability)
+    '-probesize', '1000000',
     '-i', streamUrl,
     '-c:v', 'libx264',
-    '-preset', 'ultrafast',      // fastest encoding (less CPU, more bandwidth)
+    '-preset', 'superfast',      // one step up from ultrafast for smoother output
     '-tune', 'zerolatency',
     '-profile:v', 'baseline',
     '-level', '3.1',
-    '-g', '30',
+    '-b:v', '2500k',             // fixed bitrate prevents spikes
+    '-maxrate', '3000k',
+    '-bufsize', '4000k',
+    '-g', '60',                  // keyframe every 2s (smoother than every 1s)
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
     '-ac', '2',
     '-f', 'mpegts',
     '-mpegts_flags', 'resend_headers',
-    '-flush_packets', '1',       // flush output immediately
+    '-flush_packets', '1',
+    '-muxdelay', '0',
+    '-muxpreload', '0',
     'pipe:1',
   ], {
     stdio: ['pipe', 'pipe', 'pipe'],
