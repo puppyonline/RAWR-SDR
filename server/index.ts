@@ -100,15 +100,15 @@ app.post('/api/tune', async (req, res) => {
   switch (mode) {
     case 'fm':
       // Wideband FM broadcast
-      // -s 192k divides cleanly to 48k output
-      // No -E deemp here — de-emphasis applied client-side for accuracy
-      // Fixed gain at 20 dB (AGC can overdrive strong stations causing distortion)
+      // -E deemp applies proper 75µs de-emphasis in the demodulator
+      // (more accurate than client-side approximation)
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '192k',
         '-r', '48000',
         '-l', '0',
+        '-E', 'deemp',
         '-g', '20',
       );
       break;
@@ -144,13 +144,13 @@ app.post('/api/tune', async (req, res) => {
       break;
 
     case 'hd':
-      // HD Radio - analog FM fallback
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '192k',
         '-r', '48000',
         '-l', '0',
+        '-E', 'deemp',
         '-g', '20',
       );
       break;

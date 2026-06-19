@@ -76,24 +76,10 @@ export function useAudioStream() {
       gainNodeRef.current.connect(ctx.destination);
     }
 
-    // De-emphasis and pilot filtering chain
+    // Pilot tone filter + slight smoothing
+    // De-emphasis is handled server-side by rtl_fm -E deemp (proper 75µs IIR)
     if (!filterRef.current || filterRef.current.context !== ctx) {
-      // FM de-emphasis: 75µs time constant (North America)
-      // Instead of a single aggressive shelf, use two gentler stages:
-      // 1. Highshelf at 3500Hz -6dB (tames upper presence/sibilance)
-      // 2. Highshelf at 8000Hz -4dB (rolls off remaining brightness)
-      // This approximates the 75µs curve without crushing the vocal range
-      const deemph1 = ctx.createBiquadFilter();
-      deemph1.type = 'highshelf';
-      deemph1.frequency.value = 3500;
-      deemph1.gain.value = -6;
-
-      const deemph2 = ctx.createBiquadFilter();
-      deemph2.type = 'highshelf';
-      deemph2.frequency.value = 8000;
-      deemph2.gain.value = -4;
-
-      // Pilot tone removal: cascaded lowpass at 14kHz
+      // Pilot tone removal at 14kHz
       const lpf1 = ctx.createBiquadFilter();
       lpf1.type = 'lowpass';
       lpf1.frequency.value = 14000;
@@ -104,11 +90,9 @@ export function useAudioStream() {
       lpf2.frequency.value = 14000;
       lpf2.Q.value = 1.31;
 
-      deemph1.connect(deemph2);
-      deemph2.connect(lpf1);
       lpf1.connect(lpf2);
       lpf2.connect(gainNodeRef.current);
-      filterRef.current = deemph1;
+      filterRef.current = lpf1;
     }
   }, []);
 
