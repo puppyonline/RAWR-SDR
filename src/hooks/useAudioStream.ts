@@ -75,15 +75,23 @@ export function useAudioStream() {
       gainNodeRef.current.connect(ctx.destination);
     }
 
-    // Create low-pass filter to kill 19kHz pilot tone
-    // Cutoff at 15kHz — removes pilot (19kHz) and SCA subcarriers (67kHz)
-    // while preserving all audible content (human hearing tops out ~15-16kHz)
+    // Create low-pass filter cascade to kill 19kHz pilot tone
+    // Two cascaded biquads at 14kHz give ~-40dB attenuation at 19kHz
+    // (single biquad only gives ~-12dB which isn't enough)
     if (!filterRef.current || filterRef.current.context !== ctx) {
-      filterRef.current = ctx.createBiquadFilter();
-      filterRef.current.type = 'lowpass';
-      filterRef.current.frequency.value = 15000;
-      filterRef.current.Q.value = 0.7; // Butterworth-like response
-      filterRef.current.connect(gainNodeRef.current);
+      const filter1 = ctx.createBiquadFilter();
+      filter1.type = 'lowpass';
+      filter1.frequency.value = 14000;
+      filter1.Q.value = 0.54; // Bessel-like for minimal ringing
+
+      const filter2 = ctx.createBiquadFilter();
+      filter2.type = 'lowpass';
+      filter2.frequency.value = 14000;
+      filter2.Q.value = 1.31; // Second stage steeper rolloff
+
+      filter1.connect(filter2);
+      filter2.connect(gainNodeRef.current);
+      filterRef.current = filter1;
     }
   }, []);
 
