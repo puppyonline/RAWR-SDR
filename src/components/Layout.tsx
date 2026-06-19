@@ -6,6 +6,7 @@ const navItems = [
   { path: '/am', label: 'AM Radio', icon: AMIcon },
   { path: '/atc', label: 'ATC', icon: ATCIcon },
   { path: '/hd', label: 'HD Radio', icon: HDIcon },
+  { path: '/tv', label: 'Live TV', icon: TVIcon },
   { path: '/adsb', label: 'ADS-B', icon: ADSBIcon },
 ];
 
@@ -143,6 +144,15 @@ function ADSBIcon({ active }: { active: boolean }) {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={active ? 'text-accent-bright' : 'text-white/40'}>
       <path d="M22 2L11 13" />
       <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+    </svg>
+  );
+}
+
+function TVIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={active ? 'text-accent-bright' : 'text-white/40'}>
+      <rect x="2" y="7" width="20" height="13" rx="2" />
+      <path d="M17 2l-5 5-5-5" />
     </svg>
   );
 }

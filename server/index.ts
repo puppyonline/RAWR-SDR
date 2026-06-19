@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { spawn, ChildProcess, execSync } from 'child_process';
+import hdhrRouter from './hdhr';
 
 const app = express();
 const PORT = 3001;
@@ -57,6 +58,9 @@ app.get('/api/status', (_req, res) => {
 });
 
 app.get('/api/rds', (_req, res) => res.json(currentRDS));
+
+// HDHomeRun TV endpoints
+app.use('/api/hdhr', hdhrRouter);
 
 /**
  * Hybrid tuning approach:

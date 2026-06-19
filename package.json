@@ -28,6 +28,7 @@
     "autoprefixer": "^10.4.17",
     "concurrently": "^8.2.2",
     "leaflet": "^1.9.4",
+    "mpegts.js": "^1.8.0",
     "postcss": "^8.4.33",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
