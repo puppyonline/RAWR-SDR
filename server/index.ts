@@ -269,13 +269,15 @@ app.post('/api/tune', async (req, res) => {
     } else if (mode === 'atc') {
       // === ATC: AM demod on VHF airband (118-137 MHz) ===
       // Aviation uses AM with 25 kHz channel spacing.
-      // E4000 gain must be LOW for airband — ATCO2 project recommends ~15.
-      // DC offset removal (-E dc) is critical for AM demod quality.
+      // Use 240k sample rate (proven to work for AM on RTL-SDR).
+      // The E4000 "bandwidth 0 Hz" message is cosmetic — it still receives.
+      // DC offset removal is critical for AM demod.
+      // Low gain (14 dB) to avoid ADC clipping from strong airport signals.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'am',
         '-f', `${frequency}M`,
-        '-s', '48k',
+        '-s', '240k',
         '-g', '14',
         '-l', '0',
         '-E', 'dc',
@@ -289,9 +291,20 @@ app.post('/api/tune', async (req, res) => {
         if (m) console.log(`[rtl_fm] ${m}`);
       });
 
-      // Output is at 48kHz — send directly
+      // Downsample 240kHz -> 48kHz (ratio 5:1)
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
-        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(chunk); });
+        const usable = chunk.length & ~1;
+        if (usable < 10) return;
+        const srcSamples = usable / 2;
+        const dstSamples = Math.floor(srcSamples / 5);
+        if (dstSamples < 1) return;
+
+        const output = Buffer.alloc(dstSamples * 2);
+        for (let i = 0; i < dstSamples; i++) {
+          output.writeInt16LE(chunk.readInt16LE(i * 5 * 2), i * 2);
+        }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
       });
 
     } else if (mode === 'noaa') {
