@@ -4,19 +4,32 @@ import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
 import { useAudioStream } from '../hooks/useAudioStream';
 
+// Phoenix/Mesa AZ metro AM stations
 const presets = [
-  { freq: 580, label: 'WDBO' },
-  { freq: 660, label: 'WFAN' },
-  { freq: 770, label: 'WABC' },
-  { freq: 880, label: 'WCBS' },
-  { freq: 1010, label: 'WINS' },
-  { freq: 1130, label: 'WBBR' },
-  { freq: 1280, label: 'WADO' },
-  { freq: 1560, label: 'WQEW' },
+  { freq: 550, label: 'KFYI', format: 'News/Talk' },
+  { freq: 620, label: 'KTAR', format: 'Sports (ESPN)' },
+  { freq: 740, label: 'KRMG', format: 'Talk' },
+  { freq: 860, label: 'KMVP', format: 'Sports' },
+  { freq: 910, label: 'KGME', format: 'Sports' },
+  { freq: 960, label: 'KKNT', format: 'Conservative Talk' },
+  { freq: 1010, label: 'KESZ', format: 'Standards' },
+  { freq: 1040, label: 'KXEG', format: 'Spanish Relig' },
+  { freq: 1060, label: 'KDUS', format: 'Talk' },
+  { freq: 1100, label: 'KFNX', format: 'Progressive' },
+  { freq: 1190, label: 'KNUV', format: 'Variety' },
+  { freq: 1230, label: 'KAZM', format: 'Talk' },
+  { freq: 1310, label: 'KXAM', format: 'Spanish' },
+  { freq: 1360, label: 'KLNZ', format: 'Spanish Talk' },
+  { freq: 1400, label: 'KCTK', format: 'Catholic' },
+  { freq: 1440, label: 'KAZG', format: 'Oldies' },
+  { freq: 1480, label: 'KPHX', format: 'Spanish Relig' },
+  { freq: 1510, label: 'KFNN', format: 'Business News' },
+  { freq: 1580, label: 'KMIK', format: 'Spanish' },
+  { freq: 1600, label: 'KOOL', format: 'Oldies' },
 ];
 
 function AMRadio() {
-  const [frequency, setFrequency] = useState(880);
+  const [frequency, setFrequency] = useState(620);
   const [volume, setVolume] = useState(70);
   const [signalStrength, setSignalStrength] = useState(0);
   const [power, setPower] = useState(false);
@@ -62,7 +75,7 @@ function AMRadio() {
           <div>
             <h2 className="text-lg font-semibold">AM Broadcast</h2>
             <p className="text-xs text-white/30 font-mono mt-0.5">
-              530 &ndash; 1700 kHz &middot; Direct Sampling AM
+              530 &ndash; 1700 kHz &middot; Phoenix/Mesa AZ
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -89,23 +102,19 @@ function AMRadio() {
 
         <div className="flex items-center gap-6 mt-5">
           <div className="flex items-center gap-2">
-            <input
-              type="number" min={530} max={1700} step={10} value={frequency}
+            <input type="number" min={530} max={1700} step={10} value={frequency}
               onChange={(e) => setFrequency(Math.round(Number(e.target.value)))}
-              className="input w-28 font-mono text-center text-sm"
-            />
+              className="input w-28 font-mono text-center text-sm" />
             <span className="text-xs text-white/25">kHz</span>
           </div>
           <div className="flex-1 flex items-center gap-3">
             <span className="text-xs text-white/30">Vol</span>
-            <input
-              type="range" min="0" max="100" value={volume}
+            <input type="range" min="0" max="100" value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
               className="flex-1 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
                          [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
-                         [&::-webkit-slider-thumb]:bg-warning"
-            />
+                         [&::-webkit-slider-thumb]:bg-warning" />
             <span className="text-xs font-mono text-white/30 w-8">{volume}%</span>
           </div>
         </div>
@@ -120,9 +129,7 @@ function AMRadio() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
           <span className="label">Spectrum</span>
-          <div className="mt-3">
-            <SpectrumVisualizer isActive={power && audio.isPlaying} color="#f59e0b" height={140} />
-          </div>
+          <div className="mt-3"><SpectrumVisualizer isActive={power && audio.isPlaying} color="#f59e0b" height={140} /></div>
         </div>
         <div className="card p-5">
           <span className="label">Signal</span>
@@ -131,18 +138,19 @@ function AMRadio() {
       </div>
 
       <div className="card p-5">
-        <span className="label">Presets</span>
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mt-3">
+        <span className="label">Phoenix/Mesa Presets</span>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 mt-3">
           {presets.map((p) => (
             <button
               key={p.freq}
               onClick={() => setFrequency(p.freq)}
-              className={`card-inner py-3 px-2 text-center transition-all hover:border-white/10 ${
+              className={`card-inner py-2.5 px-2 text-center transition-all hover:border-white/10 ${
                 frequency === p.freq ? 'border-warning/30 bg-warning/5' : ''
               }`}
             >
-              <div className="text-[10px] text-white/30 mb-0.5">{p.label}</div>
+              <div className="text-[10px] text-white/30 mb-0.5 truncate">{p.label}</div>
               <div className="text-xs font-mono font-medium">{p.freq}</div>
+              <div className="text-[9px] text-white/20 mt-0.5 truncate">{p.format}</div>
             </button>
           ))}
         </div>
