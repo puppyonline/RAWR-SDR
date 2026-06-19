@@ -203,8 +203,13 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
 
   ffmpeg.stderr?.on('data', (data: Buffer) => {
     const msg = data.toString().trim();
-    // Only log errors, not the constant progress output
-    if (msg.includes('Error') || msg.includes('error')) {
+    if (msg.includes('503') || msg.includes('5XX')) {
+      console.error(`[ffmpeg] Stream unavailable (likely ATSC 3.0 / DRM protected channel)`);
+      if (!res.headersSent) {
+        res.status(503).json({ error: 'Channel unavailable. ATSC 3.0 channels require HDHomeRun DVR subscription for network streaming.' });
+      }
+      ffmpeg.kill('SIGTERM');
+    } else if (msg.includes('Error') || msg.includes('error')) {
       console.error(`[ffmpeg] ${msg.slice(0, 200)}`);
     }
   });

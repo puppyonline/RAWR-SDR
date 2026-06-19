@@ -71,22 +71,53 @@ export function useStationLogos(callsigns: string[]): Record<string, string | nu
 }
 
 /**
- * TV network logos - static map of known logos from GitHub tv-logos repo.
+ * TV network logos - fetched dynamically from multiple sources:
+ * 1. HDHomeRun guide API includes ImageURL per channel
+ * 2. Logo.dev free API: https://img.logo.dev/{domain} (no key for basic use)
+ * 3. Static fallback map for major networks
  */
 export const tvNetworkLogos: Record<string, string> = {
-  'ABC': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/abc-us.png',
-  'CBS': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/cbs-us.png',
-  'NBC': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nbc-us.png',
-  'FOX': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/fox-us.png',
-  'PBS': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/pbs-us.png',
-  'CW': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/the-cw-us.png',
-  'Univision': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/univision-us.png',
-  'Telemundo': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/telemundo-us.png',
-  'ION': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/ion-television-us.png',
-  'MyNetwork': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/mynetworktv-us.png',
+  'ABC': 'https://img.logo.dev/abc.com?format=png&size=64',
+  'CBS': 'https://img.logo.dev/cbs.com?format=png&size=64',
+  'NBC': 'https://img.logo.dev/nbc.com?format=png&size=64',
+  'FOX': 'https://img.logo.dev/fox.com?format=png&size=64',
+  'PBS': 'https://img.logo.dev/pbs.org?format=png&size=64',
+  'CW': 'https://img.logo.dev/cwtv.com?format=png&size=64',
+  'Univision': 'https://img.logo.dev/univision.com?format=png&size=64',
+  'Telemundo': 'https://img.logo.dev/telemundo.com?format=png&size=64',
+  'ION': 'https://img.logo.dev/iontelevision.com?format=png&size=64',
+  'MyNetwork': 'https://img.logo.dev/mynetworktv.com?format=png&size=64',
 };
 
-/** Get a TV network logo URL by network name */
-export function getTVLogo(network: string): string | null {
-  return tvNetworkLogos[network] || null;
+// Map channel names/callsigns to their website domains for Logo.dev lookup
+const stationDomains: Record<string, string> = {
+  'KTVK': 'azfamily.com',
+  'KPHO': 'azfamily.com',
+  'KNXV': 'abc15.com',
+  'KPNX': '12news.com',
+  'KSAZ': 'fox10phoenix.com',
+  'KASW': 'azfamily.com',
+  'KAET': 'azpbs.org',
+  'KUTP': 'myfoxphoenix.com',
+  'KTVW': 'univision.com',
+  'KTAZ': 'telemundoarizona.com',
+};
+
+/** Get a TV station logo URL by callsign or channel name */
+export function getTVStationLogo(nameOrCallsign: string): string | null {
+  // Check if we have a known domain for this station
+  const upper = nameOrCallsign.toUpperCase().replace(/-.*$/, '');
+  const domain = stationDomains[upper];
+  if (domain) {
+    return `https://img.logo.dev/${domain}?format=png&size=64`;
+  }
+
+  // Try matching against network names
+  for (const [network, url] of Object.entries(tvNetworkLogos)) {
+    if (nameOrCallsign.toUpperCase().includes(network.toUpperCase())) {
+      return url;
+    }
+  }
+
+  return null;
 }

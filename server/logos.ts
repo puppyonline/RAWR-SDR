@@ -90,11 +90,27 @@ router.get('/radio/batch', async (req: Request, res: Response) => {
 router.get('/tv/:network', (req: Request, res: Response) => {
   const { network } = req.params;
   const logo = tvLogos[network] || null;
-  if (logo) {
-    res.json({ network, logo });
-  } else {
-    res.status(404).json({ network, logo: null });
+
+  // If not in static map, try Logo.dev by domain
+  if (!logo) {
+    // Try known station domains
+    const domains: Record<string, string> = {
+      'KTVK': 'azfamily.com',
+      'KPHO': 'azfamily.com',
+      'KNXV': 'abc15.com',
+      'KPNX': '12news.com',
+      'KSAZ': 'fox10phoenix.com',
+      'KAET': 'azpbs.org',
+      'KASW': 'azfamily.com',
+    };
+    const domain = domains[network.toUpperCase()];
+    if (domain) {
+      return res.json({ network, logo: `https://img.logo.dev/${domain}?format=png&size=64` });
+    }
+    return res.status(404).json({ network, logo: null });
   }
+
+  res.json({ network, logo });
 });
 
 // GET /api/logos/tv - all TV network logos

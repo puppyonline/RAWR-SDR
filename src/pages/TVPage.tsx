@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { tvNetworkLogos } from '../hooks/useStationLogos';
+import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
 
 interface Channel {
   GuideNumber: string;
@@ -116,6 +116,13 @@ function TVPage() {
     player.play();
     playerRef.current = player;
     setIsPlaying(true);
+    setError('');
+
+    // Handle stream errors (e.g. ATSC 3.0 channels returning 503)
+    player.on('error', () => {
+      setError('Channel unavailable — may be an ATSC 3.0/DRM channel requiring DVR subscription');
+      setIsPlaying(false);
+    });
   };
 
   const stopPlayback = () => {
@@ -219,13 +226,17 @@ function TVPage() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    {meta?.logo ? (
-                      <img src={meta.logo} alt={meta.network} className="w-5 h-5 object-contain rounded-sm" loading="lazy" />
-                    ) : meta ? (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase" style={{ backgroundColor: `${meta.color}30`, color: meta.color }}>
-                        {meta.network}
-                      </span>
-                    ) : null}
+                    {(() => {
+                      // Try: 1) hardcoded network logo, 2) dynamic station lookup by name
+                      const logoUrl = meta?.logo || getTVStationLogo(ch.GuideName);
+                      if (logoUrl) {
+                        return <img src={logoUrl} alt={ch.GuideName} className="w-6 h-6 object-contain rounded-sm shrink-0" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+                      }
+                      if (meta) {
+                        return <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0" style={{ backgroundColor: `${meta.color}30`, color: meta.color }}>{meta.network}</span>;
+                      }
+                      return <div className="w-6 h-6 rounded-sm bg-bg-raised shrink-0" />;
+                    })()}
                     <span className="text-xs font-mono text-zinc-400 w-8">{ch.GuideNumber}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{ch.GuideName}</div>
