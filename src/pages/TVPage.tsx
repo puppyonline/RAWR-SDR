@@ -238,9 +238,9 @@ function TVPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:items-stretch">
         {/* Video Player */}
-        <div className="lg:col-span-2 card p-0 overflow-hidden">
+        <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col">
           <div className="relative aspect-video bg-black flex items-center justify-center">
             <video
               ref={videoRef}
@@ -291,7 +291,7 @@ function TVPage() {
         </div>
 
         {/* Channel List */}
-        <div className="card p-0 max-h-[600px] overflow-y-auto">
+        <div className="card p-0 overflow-y-auto">
           <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-bg-card z-10">
             <span className="label">Channels ({channels.length})</span>
           </div>
@@ -346,43 +346,6 @@ function TVPage() {
         </div>
       </div>
 
-      {/* EPG Grid */}
-      {guide.length > 0 && (
-        <div className="card p-5">
-          <span className="label">Program Guide</span>
-          <div className="mt-3 space-y-1 max-h-80 overflow-y-auto">
-            {guide.slice(0, 20).map((ch) => {
-              const now = Math.floor(Date.now() / 1000);
-              const current = ch.Guide?.find((p) => p.StartTime <= now && p.EndTime > now);
-              const next = ch.Guide?.find((p) => p.StartTime > now);
-
-              return (
-                <div key={ch.GuideNumber} className="flex items-center gap-3 py-2 border-b border-white/[0.03] last:border-0">
-                  <span className="text-xs font-mono text-zinc-500 w-8 shrink-0">{ch.GuideNumber}</span>
-                  <span className="text-xs text-zinc-400 w-24 shrink-0 truncate">{ch.GuideName}</span>
-                  <div className="flex-1 min-w-0">
-                    {current && (
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
-                        <span className="text-xs text-zinc-200 truncate">{current.Title}</span>
-                        <span className="text-[10px] text-zinc-100/25 shrink-0">
-                          {new Date(current.EndTime * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    )}
-                    {next && (
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-white/10 shrink-0" />
-                        <span className="text-[11px] text-zinc-500 truncate">Next: {next.Title}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
