@@ -42,10 +42,49 @@ function TVPage() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [loadingBlurb, setLoadingBlurb] = useState('');
   const [hdhrStatus, setHdhrStatus] = useState<any>(null);
   const [error, setError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
+
+  const loadingBlurbs = [
+    'Waking up the hamsters that power the antenna...',
+    'Convincing electrons to flow in the right direction...',
+    'Translating ancient MPEG-2 hieroglyphics...',
+    'Politely asking ffmpeg to hurry up...',
+    'Adjusting the rabbit ears for optimal reception...',
+    'Negotiating with the airwaves...',
+    'Converting photons to pixels...',
+    'Warming up the cathode ray tubes...',
+    'Untangling the electromagnetic spectrum...',
+    'Teaching 1s and 0s to become pictures...',
+    'Bribing the signal gods for better reception...',
+    'Decoding the mysteries of broadcast television...',
+    'Performing ancient TV rituals...',
+    'Spinning up the transcode hamster wheel...',
+    'Channeling our inner antenna...',
+    'Hold tight, we\'re surfing the airwaves...',
+    'Almost there... probably...',
+    'Making the magic happen behind the scenes...',
+    'Herding radio waves into your browser...',
+    'Asking the HDHomeRun nicely for some video...',
+    'Reticulating splines... wait, wrong loading screen...',
+    'Buffering at the speed of light (minus a few seconds)...',
+    'Fun fact: TV signals travel at 186,000 miles per second...',
+    'Converting over-the-air freedom into browser content...',
+    'Crunching pixels fresh from the antenna...',
+  ];
+
+  // Cycle through blurbs while buffering
+  useEffect(() => {
+    if (!isBuffering) return;
+    setLoadingBlurb(loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)]);
+    const interval = setInterval(() => {
+      setLoadingBlurb(loadingBlurbs[Math.floor(Math.random() * loadingBlurbs.length)]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isBuffering]);
 
   // Fetch lineup and status on mount (with retry for slow HDHR discovery)
   useEffect(() => {
@@ -233,8 +272,8 @@ function TVPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-zinc-200">Tuning to {selectedChannel?.GuideName}</p>
-                    <p className="text-xs text-zinc-500 mt-1">Transcoding stream for browser playback...</p>
-                    <p className="text-2xs text-zinc-600 mt-2">This can take up to 10 seconds</p>
+                    <p className="text-xs text-zinc-400 mt-1.5 italic">{loadingBlurb}</p>
+                    <p className="text-2xs text-zinc-600 mt-3">This can take up to 10 seconds</p>
                   </div>
                 </div>
               </div>
