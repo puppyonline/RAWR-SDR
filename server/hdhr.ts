@@ -133,13 +133,26 @@ router.get('/guide', async (_req: Request, res: Response) => {
 
 // GET /api/hdhr/stream/:channel
 // Proxies the MPEG-TS stream from the HDHomeRun to the browser.
-// ATSC broadcasts are already H.264+AC3, which mpegts.js can demux.
+// Uses the URL directly from the lineup (already contains the full path).
 router.get('/stream/:channel', async (req: Request, res: Response) => {
   const device = await discoverDevice();
   if (!device) return res.status(404).json({ error: 'No device' });
 
   const channel = req.params.channel;
-  const streamUrl = `${device.BaseURL}/auto/v${channel}`;
+
+  // First try to find the channel's URL from the cached lineup
+  let streamUrl = '';
+  if (cachedLineup.length > 0) {
+    const ch = cachedLineup.find((c: any) => c.GuideNumber === channel);
+    if (ch?.URL) {
+      streamUrl = ch.URL;
+    }
+  }
+
+  // Fallback: construct URL (try both formats)
+  if (!streamUrl) {
+    streamUrl = `${device.BaseURL}/auto/v${channel}`;
+  }
 
   console.log(`[HDHR] Streaming: ${streamUrl}`);
 
@@ -148,7 +161,6 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Transfer-Encoding', 'chunked');
 
-  // Use a persistent connection to the HDHomeRun
   const options = new URL(streamUrl);
   const request = http.request({
     hostname: options.hostname,
@@ -176,7 +188,6 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
 
   request.end();
 
-  // Clean up when client disconnects
   req.on('close', () => {
     request.destroy();
   });
