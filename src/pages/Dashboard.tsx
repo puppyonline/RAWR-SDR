@@ -102,7 +102,7 @@ function Dashboard() {
             {recs.tv.nowAiring.slice(0, 6).map((show) => (
               <Link
                 key={show.channel}
-                to="/tv"
+                to={`/tv?ch=${show.channel}`}
                 className="card p-3.5 hover:border-tv/30 transition-all group"
               >
                 <div className="flex items-start justify-between gap-2">
