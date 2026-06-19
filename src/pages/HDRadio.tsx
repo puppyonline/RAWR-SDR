@@ -4,8 +4,39 @@ import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
 import { useAudioStream } from '../hooks/useAudioStream';
 
+// Phoenix/Mesa AZ HD Radio stations and subchannels
+const hdPresets = [
+  { freq: 89.5, ch: 1, label: 'KBAQ', format: 'Classical' },
+  { freq: 91.5, ch: 1, label: 'KJZZ', format: 'NPR / Public' },
+  { freq: 91.5, ch: 2, label: 'KJZZ-HD2', format: 'Jazz PHX' },
+  { freq: 92.3, ch: 1, label: 'KTAR', format: 'News/Talk' },
+  { freq: 93.3, ch: 1, label: 'KDKB', format: 'Alternative' },
+  { freq: 93.3, ch: 2, label: 'KDKB-HD2', format: 'Deep Cuts' },
+  { freq: 94.5, ch: 1, label: 'KOOL', format: 'Classic Hits' },
+  { freq: 94.5, ch: 2, label: 'KOOL-HD2', format: '80s Hits' },
+  { freq: 95.5, ch: 1, label: 'KYOT', format: 'Adult Hits' },
+  { freq: 96.9, ch: 1, label: 'KMXP', format: 'Hot AC' },
+  { freq: 96.9, ch: 2, label: 'KMXP-HD2', format: 'Dance/EDM' },
+  { freq: 97.9, ch: 1, label: 'KUPD', format: 'Rock' },
+  { freq: 97.9, ch: 2, label: 'KUPD-HD2', format: 'Metal' },
+  { freq: 98.7, ch: 1, label: 'KMVP', format: 'Sports' },
+  { freq: 99.9, ch: 1, label: 'KESZ', format: 'Adult Contemp' },
+  { freq: 99.9, ch: 2, label: 'KESZ-HD2', format: 'Christmas/Seasonal' },
+  { freq: 99.9, ch: 3, label: 'KESZ-HD3', format: 'Sports (KGME)' },
+  { freq: 100.7, ch: 1, label: 'KNIX', format: 'Country' },
+  { freq: 100.7, ch: 2, label: 'KNIX-HD2', format: 'Classic Country' },
+  { freq: 101.5, ch: 1, label: 'KALV', format: 'Top 40' },
+  { freq: 101.5, ch: 2, label: 'KALV-HD2', format: 'Pride Radio' },
+  { freq: 102.5, ch: 1, label: 'KNIX-FM', format: 'Country' },
+  { freq: 102.5, ch: 2, label: 'KNIX-HD2', format: 'New Country' },
+  { freq: 103.9, ch: 1, label: 'KEDJ', format: 'Rhythmic' },
+  { freq: 104.7, ch: 1, label: 'KFYI', format: 'Talk' },
+  { freq: 107.9, ch: 1, label: 'KMLE', format: 'Country' },
+  { freq: 107.9, ch: 2, label: 'KMLE-HD2', format: 'Arizona Country' },
+];
+
 function HDRadio() {
-  const [frequency, setFrequency] = useState(94.7);
+  const [frequency, setFrequency] = useState(91.5);
   const [hdChannel, setHdChannel] = useState(1);
   const [volume, setVolume] = useState(80);
   const [power, setPower] = useState(false);
@@ -131,6 +162,29 @@ function HDRadio() {
         <div className="card p-5">
           <span className="label">Signal</span>
           <div className="mt-3"><SignalMeter getSignalLevel={audio.getSignalLevel} isActive={power && audio.isPlaying} color="#a855f7" /></div>
+        </div>
+      </div>
+
+      {/* HD Station Presets */}
+      <div className="card p-5">
+        <span className="label">Phoenix/Mesa HD Radio Stations</span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mt-3">
+          {hdPresets.map((p) => (
+            <button
+              key={`${p.freq}-${p.ch}`}
+              onClick={() => { setFrequency(p.freq); setHdChannel(p.ch); }}
+              className={`card-inner py-2.5 px-2 text-left transition-all hover:border-white/10 ${
+                frequency === p.freq && hdChannel === p.ch ? 'border-purple-500/30 bg-purple-500/5' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-[10px] text-white/30 truncate">{p.label}</span>
+                {p.ch > 1 && <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1 rounded">HD{p.ch}</span>}
+              </div>
+              <div className="text-xs font-mono font-medium">{p.freq}</div>
+              <div className="text-[9px] text-white/20 mt-0.5 truncate">{p.format}</div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
