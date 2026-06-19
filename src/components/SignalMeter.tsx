@@ -1,30 +1,41 @@
 interface SignalMeterProps {
   value: number; // 0-100
+  color?: string;
 }
 
-function SignalMeter({ value }: SignalMeterProps) {
-  const bars = 10;
-  const activeBars = Math.round((value / 100) * bars);
-
-  const getBarColor = (index: number) => {
-    if (index >= activeBars) return 'bg-white/10';
-    if (index < bars * 0.3) return 'bg-red-400';
-    if (index < bars * 0.6) return 'bg-yellow-400';
-    return 'bg-green-400';
-  };
+function SignalMeter({ value, color = '#6366f1' }: SignalMeterProps) {
+  const segments = 20;
+  const active = Math.round((value / 100) * segments);
 
   return (
     <div className="space-y-2">
-      <div className="flex items-end gap-1 h-16 justify-center">
-        {Array.from({ length: bars }).map((_, i) => (
-          <div
-            key={i}
-            className={`w-3 rounded-sm transition-all duration-300 ${getBarColor(i)}`}
-            style={{ height: `${((i + 1) / bars) * 100}%` }}
-          />
-        ))}
+      <div className="flex items-end gap-[2px] h-10">
+        {Array.from({ length: segments }).map((_, i) => {
+          const isActive = i < active;
+          const intensity = i / segments;
+          let segColor = color;
+          if (intensity > 0.7) segColor = '#10b981';
+          else if (intensity > 0.4) segColor = '#f59e0b';
+          else segColor = '#ef4444';
+
+          return (
+            <div
+              key={i}
+              className="flex-1 rounded-sm transition-all duration-200"
+              style={{
+                height: `${30 + (i / segments) * 70}%`,
+                backgroundColor: isActive ? segColor : 'rgba(255,255,255,0.04)',
+                opacity: isActive ? 0.9 : 1,
+              }}
+            />
+          );
+        })}
       </div>
-      <div className="text-center text-sm text-white/60">{value}%</div>
+      <div className="flex justify-between items-center">
+        <span className="text-[10px] font-mono text-white/25">S0</span>
+        <span className="text-xs font-mono text-white/60">{value}%</span>
+        <span className="text-[10px] font-mono text-white/25">S9+</span>
+      </div>
     </div>
   );
 }

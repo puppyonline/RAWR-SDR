@@ -2,108 +2,146 @@ import { useState, useCallback } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
+import { useAudioStream } from '../hooks/useAudioStream';
 
-const commonFrequencies = [
-  { freq: 118.0, name: 'Tower', desc: 'Local Tower' },
-  { freq: 119.1, name: 'Ground', desc: 'Ground Control' },
-  { freq: 121.5, name: 'Guard', desc: 'Emergency' },
-  { freq: 123.45, name: 'Air-Air', desc: 'Pilot-to-Pilot' },
-  { freq: 124.0, name: 'Approach', desc: 'Approach Control' },
-  { freq: 125.5, name: 'Departure', desc: 'Departure Control' },
-  { freq: 128.95, name: 'Center', desc: 'ARTCC' },
-  { freq: 132.0, name: 'Clearance', desc: 'Clearance Delivery' },
+const commonFreqs = [
+  { freq: 118.000, label: 'Tower', desc: 'Control Tower' },
+  { freq: 119.100, label: 'Ground', desc: 'Ground Control' },
+  { freq: 121.500, label: 'Guard', desc: 'Emergency' },
+  { freq: 121.900, label: 'ATIS', desc: 'Airport Info' },
+  { freq: 123.450, label: 'Air-Air', desc: 'Multicom' },
+  { freq: 124.000, label: 'Approach', desc: 'App Control' },
+  { freq: 125.500, label: 'Departure', desc: 'Dep Control' },
+  { freq: 128.950, label: 'Center', desc: 'ARTCC' },
+  { freq: 132.000, label: 'Clearance', desc: 'Clr Delivery' },
+  { freq: 134.100, label: 'ARINC', desc: 'Data Link' },
+  { freq: 135.000, label: 'VOLMET', desc: 'Weather' },
+  { freq: 136.975, label: 'ACARS', desc: 'Aircraft Data' },
 ];
 
 function ATCRadio() {
   const [frequency, setFrequency] = useState(121.5);
-  const [isListening, setIsListening] = useState(false);
-  const [signalStrength, setSignalStrength] = useState(45);
   const [squelch, setSquelch] = useState(30);
+  const [signalStrength, setSignalStrength] = useState(0);
   const [scanning, setScanning] = useState(false);
+  const audio = useAudioStream();
 
   const handleTune = useCallback((freq: number) => {
-    setFrequency(freq);
+    setFrequency(Number(freq.toFixed(3)));
     setSignalStrength(Math.floor(Math.random() * 50) + 20);
   }, []);
 
+  const togglePlay = async () => {
+    if (audio.isPlaying) {
+      await audio.stop();
+      setSignalStrength(0);
+    } else {
+      await audio.start(frequency, 'atc');
+      setSignalStrength(Math.floor(Math.random() * 40) + 40);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="glass-panel p-6">
+    <div className="space-y-4 max-w-6xl">
+      <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold">ATC Scanner</h2>
-            <p className="text-white/50 text-sm">118.0 - 137.0 MHz Aviation Band</p>
+            <h2 className="text-lg font-semibold">Air Traffic Control</h2>
+            <p className="text-xs text-white/30 font-mono mt-0.5">118.000 &ndash; 136.975 MHz &middot; AM Narrowband</p>
           </div>
-          <div className="flex gap-2">
+
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setScanning(!scanning)}
-              className={`glass-button text-sm ${scanning ? 'bg-cyan-500/20 border-cyan-400/50' : ''}`}
+              className={`btn-ghost text-xs ${scanning ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-400' : ''}`}
             >
-              {scanning ? '⏹ Stop Scan' : '🔍 Scan'}
+              {scanning ? 'Scanning...' : 'Scan'}
             </button>
+            {audio.error && <span className="text-xs text-danger">{audio.error}</span>}
             <button
-              onClick={() => setIsListening(!isListening)}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                isListening
-                  ? 'bg-gradient-to-br from-cyan-500 to-blue-500 shadow-lg shadow-cyan-500/30'
-                  : 'glass-button'
-              }`}
+              onClick={togglePlay}
+              disabled={audio.isConnecting}
+              className={audio.isPlaying ? 'btn-danger' : 'btn-primary'}
             >
-              {isListening ? '⏸' : '▶'}
+              {audio.isConnecting ? 'Connecting...' : audio.isPlaying ? 'Stop' : 'Listen'}
             </button>
           </div>
         </div>
 
-        <div className="text-center mb-6">
-          <div className="text-6xl font-bold bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-transparent tabular-nums">
-            {frequency.toFixed(3)}
-          </div>
-          <div className="text-white/40 text-sm mt-1">MHz AM Aviation</div>
+        <div className="flex items-baseline gap-3 mb-6">
+          <span className="freq-display">{frequency.toFixed(3)}</span>
+          <span className="text-sm text-white/30">MHz</span>
+          {audio.isPlaying && (
+            <div className="flex items-center gap-1.5 ml-4">
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span className="text-xs text-cyan-400/70">Monitoring</span>
+            </div>
+          )}
         </div>
 
-        <FrequencyDial value={frequency} onChange={handleTune} min={118.0} max={137.0} step={0.005} />
-      </div>
+        <FrequencyDial value={frequency} onChange={handleTune} min={118.0} max={137.0} step={0.005} color="#22d3ee" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 glass-panel p-6">
-          <h3 className="text-sm font-semibold text-white/70 mb-3">Spectrum</h3>
-          <SpectrumVisualizer isActive={isListening} />
-        </div>
-
-        <div className="space-y-4">
-          <div className="glass-panel p-6">
-            <h3 className="text-sm font-semibold text-white/70 mb-3">Signal</h3>
-            <SignalMeter value={signalStrength} />
-          </div>
-          <div className="glass-panel p-6">
-            <h3 className="text-sm font-semibold text-white/70 mb-3">Squelch</h3>
+        <div className="flex items-center gap-4 mt-4">
+          <input
+            type="number"
+            min={118.0}
+            max={137.0}
+            step={0.005}
+            value={frequency}
+            onChange={(e) => handleTune(Number(e.target.value))}
+            className="input w-36 font-mono text-center"
+          />
+          <div className="flex-1 flex items-center gap-3">
+            <span className="text-xs text-white/30">Squelch</span>
             <input
               type="range"
               min="0"
               max="100"
               value={squelch}
               onChange={(e) => setSquelch(Number(e.target.value))}
-              className="w-full accent-cyan-400"
+              className="flex-1 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer
+                         [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
+                         [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
+                         [&::-webkit-slider-thumb]:bg-cyan-400"
             />
-            <div className="text-center text-sm text-white/50 mt-1">{squelch}%</div>
+            <span className="text-xs font-mono text-white/30 w-8">{squelch}%</span>
           </div>
         </div>
       </div>
 
-      <div className="glass-panel p-6">
-        <h3 className="text-sm font-semibold text-white/70 mb-3">Common Frequencies</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {commonFrequencies.map((f) => (
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="lg:col-span-3 card p-5">
+          <span className="label">Spectrum</span>
+          <div className="mt-3">
+            <SpectrumVisualizer isActive={audio.isPlaying} color="#22d3ee" height={130} />
+          </div>
+        </div>
+        <div className="card p-5">
+          <span className="label">Signal</span>
+          <div className="mt-3">
+            <SignalMeter value={signalStrength} color="#22d3ee" />
+          </div>
+        </div>
+      </div>
+
+      {/* Common frequencies grid */}
+      <div className="card p-5">
+        <span className="label">Common Aviation Frequencies</span>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-3">
+          {commonFreqs.map((f) => (
             <button
               key={f.freq}
               onClick={() => handleTune(f.freq)}
-              className={`glass-button text-left py-3 px-4 ${
-                frequency === f.freq ? 'border-cyan-400/50 bg-cyan-500/20' : ''
+              className={`card-inner p-3 text-left transition-all hover:border-white/10 ${
+                frequency === f.freq ? 'border-cyan-500/30 bg-cyan-500/5' : ''
               }`}
             >
-              <div className="text-xs text-white/50">{f.name}</div>
-              <div className="text-sm font-semibold">{f.freq.toFixed(3)}</div>
-              <div className="text-xs text-white/40">{f.desc}</div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase text-white/40 font-medium">{f.label}</span>
+                {f.freq === 121.5 && <span className="badge-danger text-[8px]">EMRG</span>}
+              </div>
+              <div className="text-sm font-mono font-medium">{f.freq.toFixed(3)}</div>
+              <div className="text-[10px] text-white/25 mt-0.5">{f.desc}</div>
             </button>
           ))}
         </div>

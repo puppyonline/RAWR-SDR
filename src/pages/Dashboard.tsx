@@ -1,99 +1,112 @@
 import { Link } from 'react-router-dom';
+import { useSDRStatus } from '../hooks/useSDRStatus';
 
-const features = [
-  {
-    title: 'FM Radio',
-    description: 'Tune into local FM stations (87.5 - 108 MHz)',
-    icon: '📻',
-    path: '/fm',
-    gradient: 'from-pink-500/20 to-rose-500/20',
-  },
-  {
-    title: 'AM Radio',
-    description: 'Listen to AM broadcasts (530 - 1700 kHz)',
-    icon: '🔊',
-    path: '/am',
-    gradient: 'from-amber-500/20 to-orange-500/20',
-  },
-  {
-    title: 'ATC Scanner',
-    description: 'Monitor air traffic control (118 - 137 MHz)',
-    icon: '✈️',
-    path: '/atc',
-    gradient: 'from-cyan-500/20 to-blue-500/20',
-  },
-  {
-    title: 'HD Radio',
-    description: 'Digital HD Radio reception with metadata',
-    icon: '🎵',
-    path: '/hd',
-    gradient: 'from-violet-500/20 to-purple-500/20',
-  },
-  {
-    title: 'ADS-B Tracker',
-    description: 'Track aircraft with real-time position data',
-    icon: '🛫',
-    path: '/adsb',
-    gradient: 'from-emerald-500/20 to-teal-500/20',
-  },
+const modules = [
+  { path: '/fm', label: 'FM Radio', range: '87.5 - 108 MHz', color: 'text-indigo-400', bg: 'bg-indigo-500/5 border-indigo-500/10' },
+  { path: '/am', label: 'AM Radio', range: '530 - 1700 kHz', color: 'text-amber-400', bg: 'bg-amber-500/5 border-amber-500/10' },
+  { path: '/atc', label: 'ATC Scanner', range: '118 - 137 MHz', color: 'text-cyan-400', bg: 'bg-cyan-500/5 border-cyan-500/10' },
+  { path: '/hd', label: 'HD Radio', range: '87.5 - 108 MHz', color: 'text-purple-400', bg: 'bg-purple-500/5 border-purple-500/10' },
+  { path: '/adsb', label: 'ADS-B Tracker', range: '1090 MHz', color: 'text-emerald-400', bg: 'bg-emerald-500/5 border-emerald-500/10' },
 ];
 
 function Dashboard() {
+  const status = useSDRStatus();
+
   return (
-    <div className="space-y-6">
-      <div className="glass-panel p-8 text-center">
-        <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-200 via-cyan-200 to-purple-200 bg-clip-text text-transparent">
-          RAWR-SDR
-        </h2>
-        <p className="text-white/60 max-w-2xl mx-auto">
-          Software-defined radio interface for FM, AM, ATC, HD Radio, and ADS-B aircraft tracking.
-          Connect your RTL-SDR dongle and explore the radio spectrum.
-        </p>
-      </div>
+    <div className="space-y-6 max-w-6xl">
+      {/* Device overview */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-semibold">System Overview</h2>
+            <p className="text-sm text-white/40 mt-0.5">RTL-SDR device status and configuration</p>
+          </div>
+          <span className={status.connected ? 'badge-success' : 'badge-danger'}>
+            {status.connected ? 'Online' : 'Disconnected'}
+          </span>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {features.map((feature) => (
-          <Link
-            key={feature.path}
-            to={feature.path}
-            className={`glass-panel-sm p-6 hover:scale-[1.02] transition-all duration-300 group bg-gradient-to-br ${feature.gradient}`}
-          >
-            <div className="text-4xl mb-3">{feature.icon}</div>
-            <h3 className="text-lg font-semibold mb-1 group-hover:text-purple-200 transition-colors">
-              {feature.title}
-            </h3>
-            <p className="text-sm text-white/50">{feature.description}</p>
-          </Link>
-        ))}
-      </div>
-
-      <div className="glass-panel p-6">
-        <h3 className="text-lg font-semibold mb-4">System Status</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatusCard label="SDR Device" value="RTL2832U" status="connected" />
-          <StatusCard label="Sample Rate" value="2.4 MSPS" status="active" />
-          <StatusCard label="Gain" value="Auto" status="active" />
-          <StatusCard label="Temperature" value="42°C" status="normal" />
+          <StatBlock label="Device" value={status.device} />
+          <StatBlock label="Sample Rate" value={`${(status.sampleRate / 1_000_000).toFixed(1)} MSPS`} />
+          <StatBlock label="Gain" value={status.gain} />
+          <StatBlock label="Status" value={status.activeMode} />
+        </div>
+      </div>
+
+      {/* Module grid */}
+      <div>
+        <h3 className="label mb-3 px-1">Modules</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {modules.map((m) => (
+            <Link
+              key={m.path}
+              to={m.path}
+              className={`card-inner p-5 border hover:border-white/10 hover:bg-white/[0.02] transition-all duration-150 group ${m.bg}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className={`text-sm font-semibold ${m.color}`}>{m.label}</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/20 group-hover:text-white/40 transition-colors">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </div>
+              <p className="text-xs text-white/30 font-mono">{m.range}</p>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="card p-5">
+          <h3 className="label mb-3">Getting Started</h3>
+          <ul className="space-y-2 text-sm text-white/50">
+            <li className="flex items-start gap-2">
+              <span className="text-accent mt-0.5">1.</span>
+              Ensure RTL-SDR USB dongle is connected
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent mt-0.5">2.</span>
+              Install rtl_fm / rtl_sdr drivers in your PATH
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent mt-0.5">3.</span>
+              Select a receiver module and tune a frequency
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent mt-0.5">4.</span>
+              Click play to start audio streaming
+            </li>
+          </ul>
+        </div>
+
+        <div className="card p-5">
+          <h3 className="label mb-3">Requirements</h3>
+          <div className="space-y-2 text-sm text-white/50">
+            <div className="flex justify-between">
+              <span>rtl_fm</span>
+              <span className="font-mono text-xs text-white/30">FM / AM / ATC</span>
+            </div>
+            <div className="flex justify-between">
+              <span>nrsc5</span>
+              <span className="font-mono text-xs text-white/30">HD Radio</span>
+            </div>
+            <div className="flex justify-between">
+              <span>dump1090</span>
+              <span className="font-mono text-xs text-white/30">ADS-B</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function StatusCard({ label, value, status }: { label: string; value: string; status: string }) {
-  const colors: Record<string, string> = {
-    connected: 'bg-green-400',
-    active: 'bg-blue-400',
-    normal: 'bg-emerald-400',
-  };
-
+function StatBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="glass-panel-sm p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <div className={`w-2 h-2 rounded-full ${colors[status] || 'bg-gray-400'}`} />
-        <span className="text-xs text-white/50">{label}</span>
-      </div>
-      <span className="text-sm font-semibold">{value}</span>
+    <div className="card-inner p-4">
+      <p className="label mb-1">{label}</p>
+      <p className="text-sm font-medium text-white/80">{value}</p>
     </div>
   );
 }
