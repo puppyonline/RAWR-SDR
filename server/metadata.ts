@@ -296,40 +296,75 @@ interface WikiSummary {
   url: string;
 }
 
-async function lookupWikipedia(query: string): Promise<WikiSummary | null> {
-  const cacheKey = `wiki:${query.toLowerCase()}`;
+/**
+ * Lookup a Wikipedia summary. If context is provided, validates that the
+ * returned article is relevant (e.g. actually about a TV station, not the
+ * generic word "weather" or "comet").
+ */
+async function lookupWikipedia(query: string, context?: 'tv_station' | 'artist' | 'general'): Promise<WikiSummary | null> {
+  const cacheKey = `wiki:${query.toLowerCase()}:${context || ''}`;
   const cached = getCached(cacheKey);
   if (cached !== null) return cached;
 
-  try {
-    // Use the REST API page summary endpoint
-    const title = encodeURIComponent(query.replace(/ /g, '_'));
-    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${title}`;
-    const data = await fetchJSON(url);
-
-    if (!data || data.type === 'not_found' || !data.extract) return null;
-
-    const result: WikiSummary = {
-      title: data.title,
-      extract: data.extract.slice(0, 500),
-      description: data.description || null,
-      thumbnail: data.thumbnail?.source || null,
-      url: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${title}`,
-    };
-
-    setCache(cacheKey, result);
-    return result;
-  } catch {
-    return null;
+  // For TV station lookups, try multiple disambiguated titles
+  const titlesToTry: string[] = [];
+  if (context === 'tv_station') {
+    // Try specific TV-related disambiguations first
+    titlesToTry.push(`${query} (TV channel)`);
+    titlesToTry.push(`${query} (TV network)`);
+    titlesToTry.push(`${query} (American TV channel)`);
+    titlesToTry.push(query); // fallback to exact name
+  } else {
+    titlesToTry.push(query);
   }
+
+  for (const rawTitle of titlesToTry) {
+    try {
+      const title = encodeURIComponent(rawTitle.replace(/ /g, '_'));
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${title}`;
+      const data = await fetchJSON(url);
+
+      if (!data || data.type === 'not_found' || !data.extract) continue;
+
+      // Relevance check for TV station context
+      if (context === 'tv_station') {
+        const desc = (data.description || '').toLowerCase();
+        const extract = (data.extract || '').toLowerCase();
+        const combined = desc + ' ' + extract;
+
+        // Must mention TV, channel, network, broadcast, television, or station
+        const tvKeywords = ['television', 'tv ', 'tv channel', 'network', 'broadcast', 'station', 'cable', 'streaming'];
+        const isRelevant = tvKeywords.some((kw) => combined.includes(kw));
+        if (!isRelevant) continue;
+      }
+
+      const result: WikiSummary = {
+        title: data.title,
+        extract: data.extract.slice(0, 500),
+        description: data.description || null,
+        thumbnail: data.thumbnail?.source || null,
+        url: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${title}`,
+      };
+
+      setCache(cacheKey, result);
+      return result;
+    } catch {
+      continue;
+    }
+  }
+
+  // Nothing relevant found
+  setCache(cacheKey, null, SHORT_CACHE);
+  return null;
 }
 
-// GET /api/metadata/wiki?q=KNIX+(FM)
+// GET /api/metadata/wiki?q=KNIX+(FM)&context=tv_station
 router.get('/wiki', async (req: Request, res: Response) => {
   const q = req.query.q as string;
+  const context = req.query.context as 'tv_station' | 'artist' | 'general' | undefined;
   if (!q) return res.status(400).json({ error: 'q param required' });
 
-  const info = await lookupWikipedia(q);
+  const info = await lookupWikipedia(q, context);
   if (!info) return res.status(404).json({ error: 'No Wikipedia article found' });
   res.json(info);
 });

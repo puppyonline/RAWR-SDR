@@ -178,9 +178,9 @@ export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null 
 }
 
 // ─── Hook: useWikiSummary ──────────────────────────────────────────────────
-// Generic Wikipedia summary lookup
+// Generic Wikipedia summary lookup with optional context for relevance filtering
 
-export function useWikiSummary(query: string | undefined): WikiSummary | null {
+export function useWikiSummary(query: string | undefined, context?: 'tv_station' | 'artist' | 'general'): WikiSummary | null {
   const [summary, setSummary] = useState<WikiSummary | null>(null);
   const lastQuery = useRef('');
 
@@ -191,32 +191,35 @@ export function useWikiSummary(query: string | undefined): WikiSummary | null {
       return;
     }
 
-    if (query === lastQuery.current) return;
-    lastQuery.current = query;
+    const cacheKey = `${query}:${context || ''}`;
+    if (cacheKey === lastQuery.current) return;
+    lastQuery.current = cacheKey;
 
     // Clear previous summary immediately
     setSummary(null);
 
-    const cached = getClientCached<WikiSummary>(`wiki:${query.toLowerCase()}`);
+    const cached = getClientCached<WikiSummary>(`wiki:${cacheKey.toLowerCase()}`);
     if (cached) {
       setSummary(cached);
       return;
     }
 
     let cancelled = false;
-    fetch(`/api/metadata/wiki?q=${encodeURIComponent(query)}`)
+    const params = new URLSearchParams({ q: query });
+    if (context) params.set('context', context);
+    fetch(`/api/metadata/wiki?${params}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (cancelled) return;
         if (data) {
-          setClientCache(`wiki:${query.toLowerCase()}`, data);
+          setClientCache(`wiki:${cacheKey.toLowerCase()}`, data);
         }
         setSummary(data || null);
       })
       .catch(() => { if (!cancelled) setSummary(null); });
 
     return () => { cancelled = true; };
-  }, [query]);
+  }, [query, context]);
 
   return summary;
 }

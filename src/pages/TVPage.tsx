@@ -488,8 +488,8 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
 
   // Fetch rich data
   const showInfo = useTVShowInfo(current?.Title);
-  const stationWiki = useWikiSummary(channel.GuideName);
-  const networkWiki = useWikiSummary(network && network !== 'IND' ? `${network} (TV network)` : undefined);
+  const stationWiki = useWikiSummary(channel.GuideName, 'tv_station');
+  const networkWiki = useWikiSummary(network && network !== 'IND' ? `${network} (TV network)` : undefined, 'tv_station');
 
   const formatTime = (epoch: number) =>
     new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
