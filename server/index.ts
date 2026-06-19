@@ -310,8 +310,8 @@ app.post('/api/tune', async (req, res) => {
     } else if (mode === 'noaa') {
       // === NOAA Weather Radio: narrowband FM on 162.4-162.55 MHz ===
       // NOAA uses narrowband FM with ~5kHz deviation (16kHz channel spacing).
-      // NO de-emphasis (NWR doesn't use pre-emphasis like broadcast FM).
-      // Lower gain to avoid E4000 overload from strong nearby transmitter.
+      // E4000 offset tuning avoids DC spike contaminating the FM demod.
+      // Audio bandpass filter (300-3400 Hz) removes hiss outside voice band.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'fm',
@@ -319,6 +319,8 @@ app.post('/api/tune', async (req, res) => {
         '-s', '48k',
         '-g', '21',
         '-l', '0',
+        '-E', 'offset',
+        '-E', 'dc',
       ];
 
       console.log(`[RAWR-SDR] NOAA: ${rtlFm} ${args.join(' ')}`);
@@ -329,9 +331,55 @@ app.post('/api/tune', async (req, res) => {
         if (m) console.log(`[rtl_fm] ${m}`);
       });
 
-      // Output is already at 48kHz — send directly, no downsampling needed
+      // Simple IIR bandpass filter state (300-3400 Hz at 48kHz sample rate)
+      // Using cascaded biquad: highpass at 300 Hz + lowpass at 3400 Hz
+      let hpY1 = 0, hpY2 = 0, hpX1 = 0, hpX2 = 0;
+      let lpY1 = 0, lpY2 = 0, lpX1 = 0, lpX2 = 0;
+
+      // Highpass 300 Hz biquad coefficients (Butterworth, fs=48000)
+      const hpW0 = 2 * Math.PI * 300 / 48000;
+      const hpAlpha = Math.sin(hpW0) / (2 * 0.707);
+      const hpA0 = 1 + hpAlpha;
+      const hpB0 = ((1 + Math.cos(hpW0)) / 2) / hpA0;
+      const hpB1 = (-(1 + Math.cos(hpW0))) / hpA0;
+      const hpB2 = ((1 + Math.cos(hpW0)) / 2) / hpA0;
+      const hpA1 = (-2 * Math.cos(hpW0)) / hpA0;
+      const hpA2 = (1 - hpAlpha) / hpA0;
+
+      // Lowpass 3400 Hz biquad coefficients (Butterworth, fs=48000)
+      const lpW0 = 2 * Math.PI * 3400 / 48000;
+      const lpAlpha = Math.sin(lpW0) / (2 * 0.707);
+      const lpA0 = 1 + lpAlpha;
+      const lpB0 = ((1 - Math.cos(lpW0)) / 2) / lpA0;
+      const lpB1 = (1 - Math.cos(lpW0)) / lpA0;
+      const lpB2 = ((1 - Math.cos(lpW0)) / 2) / lpA0;
+      const lpA1 = (-2 * Math.cos(lpW0)) / lpA0;
+      const lpA2 = (1 - lpAlpha) / lpA0;
+
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
-        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(chunk); });
+        const usable = chunk.length & ~1;
+        if (usable < 2) return;
+        const output = Buffer.alloc(usable);
+
+        for (let i = 0; i < usable; i += 2) {
+          let x = chunk.readInt16LE(i) / 32768;
+
+          // Highpass (remove rumble below 300 Hz)
+          let hpY = hpB0 * x + hpB1 * hpX1 + hpB2 * hpX2 - hpA1 * hpY1 - hpA2 * hpY2;
+          hpX2 = hpX1; hpX1 = x;
+          hpY2 = hpY1; hpY1 = hpY;
+
+          // Lowpass (remove hiss above 3400 Hz)
+          let lpY = lpB0 * hpY + lpB1 * lpX1 + lpB2 * lpX2 - lpA1 * lpY1 - lpA2 * lpY2;
+          lpX2 = lpX1; lpX1 = hpY;
+          lpY2 = lpY1; lpY1 = lpY;
+
+          // Slight gain boost (voice is quiet after filtering)
+          const sample = Math.max(-1, Math.min(1, lpY * 1.8));
+          output.writeInt16LE(Math.round(sample * 32000), i);
+        }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
       });
 
     } else {
