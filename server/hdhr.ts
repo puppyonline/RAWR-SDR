@@ -179,21 +179,29 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-cache, no-store');
   res.setHeader('Connection', 'keep-alive');
 
-  // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
+  // Transcode with ffmpeg: handles both ATSC 1.0 and 3.0 inputs
+  // ATSC 1.0: MPEG-2 video + AC-3 audio
+  // ATSC 3.0 (non-DRM): HEVC/H.265 video + AC-4 or AAC audio
+  // Output: H.264 baseline + AAC stereo in MPEG-TS (browser-compatible)
   const ffmpeg = spawn(ffmpegPath, [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-fflags', '+genpts+discardcorrupt',
     '-i', streamUrl,
+    '-map', '0:v:0',            // first video stream
+    '-map', '0:a:0?',           // first audio stream (optional - some channels have no audio initially)
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-tune', 'zerolatency',
-    '-profile:v', 'baseline',    // most compatible H.264 profile
+    '-profile:v', 'baseline',
     '-level', '3.1',
-    '-g', '30',                  // keyframe every 30 frames (1 sec at 30fps)
+    '-g', '30',
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-ar', '44100',              // standard audio sample rate
-    '-ac', '2',                  // stereo
+    '-ar', '44100',
+    '-ac', '2',
     '-f', 'mpegts',
-    '-mpegts_flags', 'resend_headers', // resend PAT/PMT periodically
+    '-mpegts_flags', 'resend_headers',
     'pipe:1',
   ], {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -204,13 +212,17 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   ffmpeg.stderr?.on('data', (data: Buffer) => {
     const msg = data.toString().trim();
     if (msg.includes('503') || msg.includes('5XX')) {
-      console.error(`[ffmpeg] Stream unavailable (likely ATSC 3.0 / DRM protected channel)`);
+      // DRM-protected ATSC 3.0 channel
+      console.error(`[ffmpeg] Channel blocked (ATSC 3.0 DRM): ${channel}`);
       if (!res.headersSent) {
-        res.status(503).json({ error: 'Channel unavailable. ATSC 3.0 channels require HDHomeRun DVR subscription for network streaming.' });
+        res.status(503).json({ error: 'This channel uses ATSC 3.0 DRM encryption. Use the official HDHomeRun app to watch it.' });
       }
       ffmpeg.kill('SIGTERM');
-    } else if (msg.includes('Error') || msg.includes('error')) {
-      console.error(`[ffmpeg] ${msg.slice(0, 200)}`);
+    } else if (msg.includes('AC-4') || msg.includes('ac4')) {
+      // AC-4 audio codec not supported by this ffmpeg build
+      console.error(`[ffmpeg] AC-4 audio not supported - need newer ffmpeg build`);
+    } else if (msg.includes('Error') || msg.includes('error') || msg.includes('Invalid')) {
+      console.error(`[ffmpeg] ${msg.slice(0, 300)}`);
     }
   });
 
