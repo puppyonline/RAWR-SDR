@@ -492,6 +492,13 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
   guide: GuideChannel[];
   channelMeta: Record<string, { network: string; color: string; logo?: string }>;
 }) {
+  // Re-render every 30s so current show updates when programs change
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(i);
+  }, []);
+
   const now = Math.floor(Date.now() / 1000);
   const guideChannel = guide.find((g) => g.GuideNumber === channel.GuideNumber);
   const entries = guideChannel?.Guide || [];
