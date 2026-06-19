@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -79,28 +79,25 @@ export function useNowPlayingMeta(
   station: string | undefined
 ): NowPlayingMeta | null {
   const [meta, setMeta] = useState<NowPlayingMeta | null>(null);
-  const lastQuery = useRef('');
 
   useEffect(() => {
     if (!artist && !title) {
       setMeta(null);
-      lastQuery.current = '';
       return;
     }
 
     const queryKey = `${artist || ''}|${title || ''}|${station || ''}`;
-    if (queryKey === lastQuery.current) return;
-    lastQuery.current = queryKey;
-
-    // Clear previous metadata immediately when query changes
-    setMeta(null);
+    const cacheKey = `np:${queryKey}`;
 
     // Check client cache
-    const cached = getClientCached<NowPlayingMeta>(`np:${queryKey}`);
+    const cached = getClientCached<NowPlayingMeta>(cacheKey);
     if (cached) {
       setMeta(cached);
       return;
     }
+
+    // Clear previous metadata immediately when query changes
+    setMeta(null);
 
     const params = new URLSearchParams();
     if (artist) params.set('artist', artist);
@@ -135,29 +132,26 @@ export function useNowPlayingMeta(
 
 export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null {
   const [info, setInfo] = useState<TVShowInfo | null>(null);
-  const lastTitle = useRef('');
 
   useEffect(() => {
     if (!showTitle) {
       setInfo(null);
-      lastTitle.current = '';
       return;
     }
 
     // Normalize: strip common suffixes like "New", year tags, etc.
     const normalized = showTitle.replace(/\s*\(.*?\)\s*/g, '').trim();
-    if (normalized === lastTitle.current) return;
-    lastTitle.current = normalized;
-
-    // Clear previous show info immediately when title changes
-    setInfo(null);
+    const cacheKey = `tv:${normalized.toLowerCase()}`;
 
     // Check client cache
-    const cached = getClientCached<TVShowInfo>(`tv:${normalized.toLowerCase()}`);
+    const cached = getClientCached<TVShowInfo>(cacheKey);
     if (cached) {
       setInfo(cached);
       return;
     }
+
+    // Clear previous show info immediately when title changes
+    setInfo(null);
 
     let cancelled = false;
     fetch(`/api/metadata/tv/show?title=${encodeURIComponent(normalized)}`)
@@ -165,7 +159,7 @@ export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null 
       .then((data) => {
         if (cancelled) return;
         if (data) {
-          setClientCache(`tv:${normalized.toLowerCase()}`, data);
+          setClientCache(cacheKey, data);
         }
         setInfo(data || null);
       })
@@ -182,27 +176,24 @@ export function useTVShowInfo(showTitle: string | undefined): TVShowInfo | null 
 
 export function useWikiSummary(query: string | undefined, context?: 'tv_station' | 'artist' | 'general'): WikiSummary | null {
   const [summary, setSummary] = useState<WikiSummary | null>(null);
-  const lastQuery = useRef('');
 
   useEffect(() => {
     if (!query) {
       setSummary(null);
-      lastQuery.current = '';
       return;
     }
 
-    const cacheKey = `${query}:${context || ''}`;
-    if (cacheKey === lastQuery.current) return;
-    lastQuery.current = cacheKey;
+    const cacheKey = `wiki:${query}:${context || ''}`.toLowerCase();
 
-    // Clear previous summary immediately
-    setSummary(null);
-
-    const cached = getClientCached<WikiSummary>(`wiki:${cacheKey.toLowerCase()}`);
+    // Check client cache
+    const cached = getClientCached<WikiSummary>(cacheKey);
     if (cached) {
       setSummary(cached);
       return;
     }
+
+    // Clear stale data
+    setSummary(null);
 
     let cancelled = false;
     const params = new URLSearchParams({ q: query });
@@ -212,7 +203,7 @@ export function useWikiSummary(query: string | undefined, context?: 'tv_station'
       .then((data) => {
         if (cancelled) return;
         if (data) {
-          setClientCache(`wiki:${cacheKey.toLowerCase()}`, data);
+          setClientCache(cacheKey, data);
         }
         setSummary(data || null);
       })
