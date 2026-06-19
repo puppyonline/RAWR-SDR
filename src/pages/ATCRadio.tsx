@@ -15,6 +15,8 @@ const presets = [
   { freq: 121.250, label: 'PHX Clr', desc: 'Clearance Delivery', group: 'KPHX' },
   { freq: 124.100, label: 'PHX App N', desc: 'Approach North', group: 'KPHX' },
   { freq: 126.100, label: 'PHX App S', desc: 'Approach South', group: 'KPHX' },
+  { freq: 126.600, label: 'PHX App E', desc: 'Approach East', group: 'KPHX' },
+  { freq: 126.800, label: 'PHX App H', desc: 'Approach High (10500+)', group: 'KPHX' },
   { freq: 120.700, label: 'PHX App W', desc: 'Approach West', group: 'KPHX' },
   { freq: 125.100, label: 'PHX Dep', desc: 'Departure', group: 'KPHX' },
   { freq: 123.700, label: 'PHX Dep E', desc: 'Departure East', group: 'KPHX' },

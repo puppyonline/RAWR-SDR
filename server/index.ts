@@ -268,18 +268,18 @@ app.post('/api/tune', async (req, res) => {
 
     } else if (mode === 'atc') {
       // === ATC: AM demod on VHF airband (118-137 MHz) ===
-      // Aviation uses AM with 25 kHz channel spacing.
-      // Use 240k sample rate (proven to work for AM on RTL-SDR).
-      // The E4000 "bandwidth 0 Hz" message is cosmetic — it still receives.
-      // DC offset removal is critical for AM demod.
-      // Low gain (14 dB) to avoid ADC clipping from strong airport signals.
+      // E4000 tuner: use offset tuning (-E offset) to avoid DC spike in AM demod.
+      // The E4000's IF bandwidth filter doesn't work (driver bug) but offset tuning
+      // shifts the signal away from DC where it can be properly demodulated.
+      // Gain 24 dB: moderate, avoids clipping while pulling in signal.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'am',
         '-f', `${frequency}M`,
         '-s', '240k',
-        '-g', '14',
+        '-g', '24',
         '-l', '0',
+        '-E', 'offset',
         '-E', 'dc',
       ];
 
