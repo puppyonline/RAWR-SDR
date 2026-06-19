@@ -164,18 +164,54 @@ app.post('/api/tune', async (req, res) => {
         wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
       });
 
+    } else if (mode === 'atc') {
+      // === ATC: rtl_fm works fine for VHF AM (118-137 MHz, no direct sampling) ===
+      // Same approach as FM: run at 171k, downsample in Node
+      const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
+      const args = [
+        '-M', 'am',
+        '-f', `${frequency}M`,
+        '-s', '171k',
+        '-l', '0',
+        '-g', '30',
+      ];
+
+      console.log(`[RAWR-SDR] ATC: ${rtlFm} ${args.join(' ')}`);
+      activeProcess = spawn(rtlFm, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      activeProcess.stderr?.on('data', (d: Buffer) => {
+        const m = d.toString().trim();
+        if (m) console.log(`[rtl_fm] ${m}`);
+      });
+
+      // Downsample 171kHz -> 48kHz
+      activeProcess.stdout?.on('data', (chunk: Buffer) => {
+        const usable = chunk.length & ~1;
+        if (usable < 4) return;
+        const srcSamples = usable / 2;
+        const ratio = 171000 / 48000;
+        const dstSamples = Math.floor(srcSamples / ratio);
+        if (dstSamples < 1) return;
+
+        const output = Buffer.alloc(dstSamples * 2);
+        for (let i = 0; i < dstSamples; i++) {
+          const srcIdx = Math.min(Math.floor(i * ratio), srcSamples - 1);
+          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
+        }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+      });
+
     } else {
-      // === AM / ATC: use rtl_sdr + our DSP ===
+      // === AM broadcast: rtl_sdr + our DSP (needs direct sampling) ===
       const rtlSdr = isWin ? 'rtl_sdr.exe' : 'rtl_sdr';
-      const freqHz = mode === 'am'
-        ? Math.round(frequency * 1000)
-        : Math.round(frequency * 1_000_000);
+      const freqHz = Math.round(frequency * 1000);
 
-      const args: string[] = [];
-      if (mode === 'am') args.push('-D', '2'); // direct sampling Q-branch
-      args.push('-s', '240000', '-f', String(freqHz), '-g', '30', '-');
+      // rtl_sdr syntax: rtl_sdr [options] filename
+      // '-' means stdout. Must be LAST argument.
+      const args = ['-D', '2', '-s', '240000', '-f', String(freqHz), '-g', '30', '-S', '-'];
 
-      console.log(`[RAWR-SDR] AM/ATC: ${rtlSdr} ${args.join(' ')}`);
+      console.log(`[RAWR-SDR] AM: ${rtlSdr} ${args.join(' ')}`);
       activeProcess = spawn(rtlSdr, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
       activeProcess.stderr?.on('data', (d: Buffer) => {
