@@ -279,22 +279,14 @@ function TVPage() {
               </div>
             )}
           </div>
-          {/* Now playing bar */}
+          {/* Now playing panel (enhanced) */}
           {selectedChannel && (
-            <div className="p-4 border-t border-white/[0.06] flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono font-semibold text-brand">{selectedChannel.GuideNumber}</span>
-                  <span className="text-sm font-medium">{selectedChannel.GuideName}</span>
-                </div>
-                {getCurrentProgram(selectedChannel.GuideNumber) && (
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    {getCurrentProgram(selectedChannel.GuideNumber)?.Title}
-                  </p>
-                )}
-              </div>
-              <button onClick={stopPlayback} className="btn-danger text-xs">Stop</button>
-            </div>
+            <NowPlayingTV
+              channel={selectedChannel}
+              guide={guide}
+              network={channelMeta[selectedChannel.GuideNumber.split('.')[0]]?.network}
+              onStop={stopPlayback}
+            />
           )}
         </div>
 
@@ -333,7 +325,12 @@ function TVPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{ch.GuideName}</div>
                       {program && (
-                        <div className="text-[11px] text-zinc-500 truncate">{program.Title}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-zinc-500 truncate">{program.Title}</span>
+                          <span className="text-[10px] text-zinc-600 shrink-0">
+                            &middot; {Math.ceil((program.EndTime - Math.floor(Date.now() / 1000)) / 60)}m
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -384,6 +381,100 @@ function TVPage() {
               );
             })}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Now Playing TV Panel ────────────────────────────────────────────────────
+
+function NowPlayingTV({ channel, guide, network, onStop }: {
+  channel: Channel;
+  guide: GuideChannel[];
+  network?: string;
+  onStop: () => void;
+}) {
+  const [, setTick] = useState(0);
+
+  // Re-render every 30s to keep time remaining accurate
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const now = Math.floor(Date.now() / 1000);
+  const guideChannel = guide.find((g) => g.GuideNumber === channel.GuideNumber);
+  const entries = guideChannel?.Guide || [];
+  const current = entries.find((e) => e.StartTime <= now && e.EndTime > now);
+  const next = entries.find((e) => e.StartTime > now);
+
+  // Calculate progress
+  const progress = current
+    ? Math.min(100, Math.round(((now - current.StartTime) / (current.EndTime - current.StartTime)) * 100))
+    : 0;
+  const timeRemaining = current ? Math.max(0, Math.ceil((current.EndTime - now) / 60)) : 0;
+
+  const formatTime = (epoch: number) =>
+    new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  return (
+    <div className="border-t border-white/[0.06]">
+      {/* Channel header + stop button */}
+      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm font-mono font-bold text-tv">{channel.GuideNumber}</span>
+          <span className="text-sm font-semibold text-zinc-100">{channel.GuideName}</span>
+          {network && (
+            <span className="badge bg-tv/10 text-tv text-2xs border border-tv/20">{network}</span>
+          )}
+        </div>
+        <button onClick={onStop} className="btn-danger text-xs">Stop</button>
+      </div>
+
+      {/* Current program info */}
+      {current ? (
+        <div className="px-4 pb-4">
+          {/* Progress bar */}
+          <div className="h-1 bg-bg-raised rounded-full overflow-hidden mb-3">
+            <div
+              className="h-full bg-tv/70 rounded-full transition-all duration-1000"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-semibold text-zinc-100">{current.Title}</h4>
+              {current.EpisodeTitle && (
+                <p className="text-xs text-zinc-400 mt-0.5">"{current.EpisodeTitle}"</p>
+              )}
+              {current.Synopsis && (
+                <p className="text-xs text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">
+                  {current.Synopsis}
+                </p>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-mono text-zinc-300">{timeRemaining}m left</p>
+              <p className="text-2xs text-zinc-600 mt-0.5">
+                {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
+              </p>
+            </div>
+          </div>
+
+          {/* Up next */}
+          {next && (
+            <div className="mt-3 pt-2.5 border-t border-white/[0.04] flex items-center gap-2">
+              <span className="text-2xs text-zinc-600 uppercase tracking-wide">Up Next</span>
+              <span className="text-xs text-zinc-400 truncate">{next.Title}</span>
+              <span className="text-2xs text-zinc-600 shrink-0">{formatTime(next.StartTime)}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="px-4 pb-3">
+          <p className="text-xs text-zinc-500">No program info available</p>
         </div>
       )}
     </div>

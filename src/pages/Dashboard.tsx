@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useSDRStatus } from '../hooks/useSDRStatus';
 import { useState, useEffect } from 'react';
+import StationLogo from '../components/StationLogo';
+
+// ─── Types ─────────────────────────────────────────────────────────────────
 
 interface NewsItem {
   title: string;
@@ -12,180 +15,261 @@ interface NewsItem {
   image?: string;
 }
 
+interface FMStation {
+  freq: number;
+  callsign: string;
+  format: string;
+  slogan?: string;
+  city: string;
+  popular: boolean;
+}
+
+interface TVNowAiring {
+  channel: string;
+  channelName: string;
+  network?: string;
+  title: string;
+  episodeTitle?: string;
+  synopsis?: string;
+  startTime: number;
+  endTime: number;
+  timeRemaining: number;
+  progress: number;
+}
+
+interface Recommendations {
+  radio: { featured: FMStation[]; all: FMStation[] };
+  tv: { nowAiring: TVNowAiring[] };
+  updatedAt: string;
+}
+
+// ─── Dashboard ─────────────────────────────────────────────────────────────
+
 function Dashboard() {
   const status = useSDRStatus();
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [recs, setRecs] = useState<Recommendations | null>(null);
 
   useEffect(() => {
     fetch('/api/news')
       .then((r) => r.ok ? r.json() : [])
       .then(setNews)
       .catch(() => {});
+
+    fetch('/api/recommendations')
+      .then((r) => r.ok ? r.json() : null)
+      .then(setRecs)
+      .catch(() => {});
+
+    // Refresh recommendations every 5 minutes (TV shows change)
+    const interval = setInterval(() => {
+      fetch('/api/recommendations')
+        .then((r) => r.ok ? r.json() : null)
+        .then(setRecs)
+        .catch(() => {});
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="space-y-5">
-      {/* Hero */}
+      {/* ─── Hero ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-50">Welcome to Airwave</h1>
-          <p className="text-sm text-zinc-500 mt-1">Your local media hub &mdash; Mesa, AZ</p>
+          <h1 className="text-2xl font-bold text-zinc-50">{getGreeting()}</h1>
+          <p className="text-sm text-zinc-500 mt-1">Your local over-the-air media hub &mdash; Mesa, AZ</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${status.connected ? 'bg-live animate-pulse-live' : 'bg-danger'}`} />
-          <span className="text-xs text-zinc-400">{status.connected ? 'All systems online' : 'SDR offline'}</span>
-        </div>
-      </div>
-
-      {/* Quick access grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        <QuickCard
-          to="/fm"
-          title="FM Radio"
-          subtitle="26 local stations"
-          accent="radio"
-          icon={<WaveIcon />}
-        />
-        <QuickCard
-          to="/tv"
-          title="Live TV"
-          subtitle="HDHomeRun Flex 4K"
-          accent="tv"
-          icon={<TVIcon />}
-        />
-        <QuickCard
-          to="/atc"
-          title="ATC Scanner"
-          subtitle="PHX • IWA • DVT"
-          accent="aviation"
-          icon={<PlaneIcon />}
-        />
-        <QuickCard
-          to="/hd"
-          title="HD Radio"
-          subtitle="27 digital channels"
-          accent="radio"
-          icon={<HDIcon />}
-        />
-        <QuickCard
-          to="/adsb"
-          title="ADS-B Tracker"
-          subtitle="1090 MHz transponder"
-          accent="aviation"
-          icon={<RadarIcon />}
-        />
-        <QuickCard
-          to="/am"
-          title="AM Radio"
-          subtitle="20 local stations"
-          accent="radio"
-          icon={<AMIcon />}
-        />
-      </div>
-
-      {/* Status row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="card p-4">
-          <span className="label">SDR Device</span>
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-zinc-200">{status.device}</span>
-            <span className={`badge ${status.connected ? 'badge-live' : 'bg-danger/10 text-danger border border-danger/20'}`}>
-              {status.connected ? 'Connected' : 'Offline'}
-            </span>
-          </div>
-        </div>
-
-        <div className="card p-4">
-          <span className="label">HDHomeRun</span>
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-zinc-200">Flex 4K</span>
-            <span className="badge badge-live">Connected</span>
-          </div>
-        </div>
-
-        <div className="card p-4">
-          <span className="label">Location</span>
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-zinc-200">Mesa, AZ 85202</span>
-            <span className="text-xs text-zinc-500">33.41°N 111.83°W</span>
-          </div>
+        <div className="flex items-center gap-3">
+          <StatusBadge label="SDR" connected={status.connected} />
+          <StatusBadge label="HDHR" connected={true} />
         </div>
       </div>
 
-      {/* Local News */}
-      {news.length > 0 && (
-        <div className="card p-5">
+      {/* ─── Now on TV ────────────────────────────────────────────────── */}
+      {recs?.tv.nowAiring && recs.tv.nowAiring.length > 0 && (
+        <section>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-zinc-200">Local News &amp; Entertainment</h3>
-            <span className="text-2xs text-zinc-500">Phoenix / Mesa</span>
+            <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-tv animate-pulse" />
+              Now on TV
+            </h2>
+            <Link to="/guide" className="text-2xs text-zinc-500 hover:text-brand-bright transition-colors">
+              Full Guide &rarr;
+            </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {recs.tv.nowAiring.slice(0, 6).map((show) => (
+              <Link
+                key={show.channel}
+                to="/tv"
+                className="card p-3.5 hover:border-tv/30 transition-all group"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xs font-mono text-tv font-semibold">{show.channel}</span>
+                      {show.network && (
+                        <span className="text-2xs text-zinc-500">{show.network}</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-zinc-200 truncate group-hover:text-zinc-50 transition-colors">
+                      {show.title}
+                    </p>
+                    {show.episodeTitle && (
+                      <p className="text-2xs text-zinc-500 truncate mt-0.5">{show.episodeTitle}</p>
+                    )}
+                  </div>
+                  <span className="text-2xs text-zinc-600 shrink-0">{show.timeRemaining}m left</span>
+                </div>
+                {/* Progress bar */}
+                <div className="mt-2.5 h-1 bg-bg-raised rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-tv/60 rounded-full transition-all"
+                    style={{ width: `${show.progress}%` }}
+                  />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ─── Featured Radio Stations ──────────────────────────────────── */}
+      {recs?.radio.featured && recs.radio.featured.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-radio animate-pulse" />
+              Featured Stations
+            </h2>
+            <Link to="/fm" className="text-2xs text-zinc-500 hover:text-brand-bright transition-colors">
+              All FM &rarr;
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {recs.radio.featured.slice(0, 10).map((station) => (
+              <Link
+                key={station.callsign}
+                to="/fm"
+                className="card p-3 hover:border-radio/30 transition-all group flex items-center gap-2.5"
+              >
+                <StationLogo callsign={station.callsign} size={32} fallbackColor="#8b5cf6" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-zinc-200 group-hover:text-zinc-50 truncate">
+                    {station.callsign}
+                  </p>
+                  <p className="text-2xs text-zinc-500 truncate">
+                    {station.freq} &middot; {station.format}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ─── Quick Access ─────────────────────────────────────────────── */}
+      <section>
+        <h2 className="text-sm font-semibold text-zinc-200 mb-3">Tune In</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+          <QuickCard to="/fm" label="FM Radio" count="26 stations" accent="radio" icon={<WaveIcon />} />
+          <QuickCard to="/hd" label="HD Radio" count="27 channels" accent="radio" icon={<HDIcon />} />
+          <QuickCard to="/am" label="AM Radio" count="20 stations" accent="radio" icon={<AMIcon />} />
+          <QuickCard to="/tv" label="Live TV" count="HDHR Flex 4K" accent="tv" icon={<TVIcon />} />
+          <QuickCard to="/atc" label="ATC Scanner" count="PHX &middot; IWA" accent="aviation" icon={<PlaneIcon />} />
+          <QuickCard to="/adsb" label="ADS-B" count="1090 MHz" accent="aviation" icon={<RadarIcon />} />
+        </div>
+      </section>
+
+      {/* ─── Local News ───────────────────────────────────────────────── */}
+      {news.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-zinc-200">Local News</h2>
+            <span className="text-2xs text-zinc-600">Phoenix / Mesa</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {news.slice(0, 6).map((item, i) => (
               <a
                 key={i}
                 href={item.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="card-inner p-3 hover:border-brand/20 transition-colors group flex gap-3"
+                className="card p-3.5 hover:border-brand/20 transition-colors group flex gap-3"
               >
                 {item.image && (
-                  <img src={item.image} alt="" className="w-16 h-12 object-cover rounded shrink-0" loading="lazy" />
+                  <img
+                    src={item.image}
+                    alt=""
+                    className="w-20 h-14 object-cover rounded shrink-0"
+                    loading="lazy"
+                  />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-zinc-200 group-hover:text-brand-bright transition-colors line-clamp-2">
+                  <p className="text-xs font-medium text-zinc-200 group-hover:text-brand-bright transition-colors line-clamp-2 leading-relaxed">
                     {item.title}
                   </p>
-                  <div className="flex items-center gap-2 mt-1.5">
+                  <div className="flex items-center gap-2 mt-2">
                     <span className="text-2xs text-zinc-500">{item.source}</span>
                     {item.pubDate && (
-                      <span className="text-2xs text-zinc-600">
-                        {timeAgo(item.pubDate)}
-                      </span>
+                      <span className="text-2xs text-zinc-600">{timeAgo(item.pubDate)}</span>
                     )}
                   </div>
                 </div>
               </a>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* About section */}
-      <div className="card p-5">
-        <h3 className="text-sm font-semibold text-zinc-200 mb-3">About Airwave</h3>
-        <p className="text-sm text-zinc-400 leading-relaxed">
-          Airwave is your centralized hub for all over-the-air media in your local area.
-          Tune into FM and AM radio, receive HD Radio with metadata, watch live OTA television
-          through your HDHomeRun, scan air traffic control communications, and track aircraft
-          overhead via ADS-B &mdash; all from one interface.
-        </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-          <Stat label="FM Stations" value="26" />
-          <Stat label="AM Stations" value="20" />
-          <Stat label="HD Channels" value="27" />
-          <Stat label="ATC Freqs" value="25" />
+      {/* ─── System Info (collapsed) ──────────────────────────────────── */}
+      <section className="card p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Stat label="FM" value="26" />
+            <Stat label="AM" value="20" />
+            <Stat label="HD" value="27" />
+            <Stat label="TV" value={recs?.tv.nowAiring.length?.toString() || '—'} />
+            <Stat label="ATC" value="25" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xs text-zinc-600">{status.device}</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-live' : 'bg-danger'}`} />
+          </div>
         </div>
-      </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Sub-components ────────────────────────────────────────────────────────
+
+function StatusBadge({ label, connected }: { label: string; connected: boolean }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-live animate-pulse-live' : 'bg-danger'}`} />
+      <span className="text-2xs text-zinc-500">{label}</span>
     </div>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card-inner p-3 text-center">
-      <div className="text-lg font-bold font-mono text-zinc-100">{value}</div>
-      <div className="text-2xs text-zinc-500 mt-0.5">{label}</div>
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs font-mono font-bold text-zinc-200">{value}</span>
+      <span className="text-2xs text-zinc-500">{label}</span>
     </div>
   );
 }
 
-function QuickCard({ to, title, subtitle, accent, icon }: {
-  to: string; title: string; subtitle: string; accent: string; icon: React.ReactNode;
+function QuickCard({ to, label, count, accent, icon }: {
+  to: string; label: string; count: string; accent: string; icon: React.ReactNode;
 }) {
-  const colors: Record<string, string> = {
-    radio: 'border-radio/20 hover:border-radio/40 hover:bg-radio/[0.03]',
-    tv: 'border-tv/20 hover:border-tv/40 hover:bg-tv/[0.03]',
-    aviation: 'border-aviation/20 hover:border-aviation/40 hover:bg-aviation/[0.03]',
+  const borderColors: Record<string, string> = {
+    radio: 'hover:border-radio/30',
+    tv: 'hover:border-tv/30',
+    aviation: 'hover:border-aviation/30',
   };
   const iconColors: Record<string, string> = {
     radio: 'text-radio',
@@ -194,41 +278,50 @@ function QuickCard({ to, title, subtitle, accent, icon }: {
   };
 
   return (
-    <Link
-      to={to}
-      className={`card p-4 transition-all duration-200 group ${colors[accent]}`}
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-200 group-hover:text-zinc-50 transition-colors">{title}</h3>
-          <p className="text-xs text-zinc-500 mt-0.5">{subtitle}</p>
-        </div>
+    <Link to={to} className={`card p-3 transition-all group ${borderColors[accent]}`}>
+      <div className="flex items-center gap-2.5">
         <div className={`opacity-50 group-hover:opacity-80 transition-opacity ${iconColors[accent]}`}>
           {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-zinc-200 group-hover:text-zinc-50 transition-colors truncate">{label}</p>
+          <p className="text-2xs text-zinc-500" dangerouslySetInnerHTML={{ __html: count }} />
         </div>
       </div>
     </Link>
   );
 }
 
-// Simple inline icons
+// ─── Icons ─────────────────────────────────────────────────────────────────
+
 function WaveIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12h2l3-9 4 18 4-18 3 9h4"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12h2l3-9 4 18 4-18 3 9h4"/></svg>;
 }
 function TVIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M17 2l-5 5-5-5"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M17 2l-5 5-5-5"/></svg>;
 }
 function PlaneIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>;
 }
 function HDIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 10v4M7 12h4M11 10v4M15 10h2a2 2 0 010 4h-2v-4z"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M7 10v4M7 12h4M11 10v4M15 10h2a2 2 0 010 4h-2v-4z"/></svg>;
 }
 function RadarIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>;
 }
 function AMIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12c0 0 3-8 10-8s10 8 10 8"/><path d="M5 12c0 0 2-5 7-5s7 5 7 5"/><circle cx="12" cy="12" r="2"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12c0 0 3-8 10-8s10 8 10 8"/><path d="M5 12c0 0 2-5 7-5s7 5 7 5"/><circle cx="12" cy="12" r="2"/></svg>;
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return 'Late Night Airwave';
+  if (hour < 12) return 'Good Morning';
+  if (hour < 17) return 'Good Afternoon';
+  if (hour < 21) return 'Good Evening';
+  return 'Late Night Airwave';
 }
 
 function timeAgo(dateStr: string): string {
@@ -236,10 +329,12 @@ function timeAgo(dateStr: string): string {
   const now = Date.now();
   const diff = now - date.getTime();
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 export default Dashboard;

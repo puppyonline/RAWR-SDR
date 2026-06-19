@@ -18,6 +18,8 @@ declare module 'mpegts.js' {
     play(): void;
     pause(): void;
     destroy(): void;
+    on(event: string, callback: (...args: any[]) => void): void;
+    off(event: string, callback: (...args: any[]) => void): void;
   }
 
   function isSupported(): boolean;

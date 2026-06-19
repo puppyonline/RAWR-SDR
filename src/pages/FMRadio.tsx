@@ -3,28 +3,38 @@ import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
 import StationLogo from '../components/StationLogo';
-import StationInfo from '../components/StationInfo';
 import { useAudioStream } from '../hooks/useAudioStream';
 
-const presets = [
-  { freq: 89.5, label: 'KBAQ', format: 'Classical' },
-  { freq: 91.5, label: 'KJZZ', format: 'Public/Jazz' },
-  { freq: 92.3, label: 'KTAR', format: 'News/Talk' },
-  { freq: 93.3, label: 'KDKB', format: 'Alternative' },
-  { freq: 94.5, label: 'KOOL', format: 'Classic Hits' },
-  { freq: 95.5, label: 'KYOT', format: 'Adult Hits' },
-  { freq: 96.9, label: 'KMXP', format: 'Hot AC' },
-  { freq: 97.9, label: 'KUPD', format: 'Rock' },
-  { freq: 98.7, label: 'KNRJ', format: 'Regional Mex' },
-  { freq: 99.9, label: 'KESZ', format: 'Adult Contemp' },
-  { freq: 100.3, label: 'KSLX', format: 'Classic Rock' },
-  { freq: 100.7, label: 'KNIX', format: 'Country' },
-  { freq: 101.5, label: 'KZON', format: 'Alt Rock' },
-  { freq: 102.5, label: 'KNIX', format: 'Country' },
-  { freq: 103.9, label: 'KEDJ', format: 'Rhythmic' },
-  { freq: 104.7, label: 'KFYI', format: 'Talk' },
-  { freq: 106.9, label: 'KDVA', format: 'Top 40' },
-  { freq: 107.9, label: 'KMLE', format: 'Country' },
+interface StationPreset {
+  freq: number;
+  label: string;
+  format: string;
+  slogan?: string;
+  owner?: string;
+  city?: string;
+  website?: string;
+  power?: string;
+}
+
+const presets: StationPreset[] = [
+  { freq: 89.5, label: 'KBAQ', format: 'Classical', slogan: 'Classical Music for Arizona', owner: 'Arizona State University', city: 'Phoenix, AZ', power: '100 kW', website: 'kbaq.org' },
+  { freq: 91.5, label: 'KJZZ', format: 'Public/Jazz', slogan: "Arizona's NPR Station", owner: 'Maricopa Community Colleges', city: 'Phoenix, AZ', power: '100 kW', website: 'kjzz.org' },
+  { freq: 92.3, label: 'KTAR', format: 'News/Talk', slogan: 'Arizona News & Talk', owner: 'Bonneville International', city: 'Glendale, AZ', power: '97 kW', website: 'ktar.com' },
+  { freq: 93.3, label: 'KDKB', format: 'Alternative', slogan: '93.3 ALT AZ', owner: 'Riviera Broadcasting', city: 'Mesa, AZ', power: '100 kW', website: 'alt933.com' },
+  { freq: 94.5, label: 'KOOL', format: 'Classic Hits', slogan: "Arizona's Classic Hits", owner: 'iHeartMedia', city: 'Phoenix, AZ', power: '97 kW', website: 'kfrq.com' },
+  { freq: 95.5, label: 'KYOT', format: 'Adult Hits', slogan: 'The Coyote', owner: 'CBS Radio', city: 'Phoenix, AZ', power: '99 kW' },
+  { freq: 96.9, label: 'KMXP', format: 'Hot AC', slogan: 'Mix 96.9', owner: 'Hubbard Broadcasting', city: 'Phoenix, AZ', power: '100 kW' },
+  { freq: 97.9, label: 'KUPD', format: 'Rock', slogan: 'Real Rock Radio', owner: 'Riviera Broadcasting', city: 'Tempe, AZ', power: '100 kW', website: 'kupd.com' },
+  { freq: 98.7, label: 'KNRJ', format: 'Regional Mex', city: 'Phoenix, AZ', power: '28 kW' },
+  { freq: 99.9, label: 'KESZ', format: 'Adult Contemp', slogan: 'More Music, Less Talk', owner: 'iHeartMedia', city: 'Phoenix, AZ', power: '100 kW' },
+  { freq: 100.3, label: 'KSLX', format: 'Classic Rock', slogan: 'Arizona Classic Rock', owner: 'Bonneville International', city: 'Scottsdale, AZ', power: '100 kW', website: 'kslx.com' },
+  { freq: 100.7, label: 'KNIX', format: 'Country', slogan: "Arizona's #1 for New Country", owner: 'iHeartMedia', city: 'Phoenix, AZ', power: '100 kW', website: 'knix.com' },
+  { freq: 101.5, label: 'KZON', format: 'Alt Rock', slogan: 'The Zone', owner: 'Bonneville International', city: 'Phoenix, AZ', power: '100 kW' },
+  { freq: 102.5, label: 'KNIX', format: 'Country', city: 'Tolleson, AZ', power: '50 kW' },
+  { freq: 103.9, label: 'KEDJ', format: 'Rhythmic', slogan: 'The Edge', owner: 'iHeartMedia', city: 'Sun City, AZ', power: '100 kW' },
+  { freq: 104.7, label: 'KFYI', format: 'Talk', slogan: 'News Talk 104.7', owner: 'iHeartMedia', city: 'Phoenix, AZ', power: '100 kW' },
+  { freq: 106.9, label: 'KDVA', format: 'Top 40', city: 'Buckeye, AZ', power: '3.6 kW' },
+  { freq: 107.9, label: 'KMLE', format: 'Country', slogan: 'Country Music for Arizona', owner: 'Riviera Broadcasting', city: 'Chandler, AZ', power: '100 kW', website: 'kmle.com' },
 ];
 
 function FMRadio() {
@@ -118,32 +128,13 @@ function FMRadio() {
         </div>
       </div>
 
-      {/* RDS */}
-      {power && Object.keys(rds).length > 0 && (
-        <div className="card p-4">
-          <span className="label text-radio">RDS Data</span>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-            {rds.ps && <MetaChip label="Station" value={rds.ps} />}
-            {rds.radiotext && <MetaChip label="Radio Text" value={rds.radiotext} span={2} />}
-            {rds.prog_type && <MetaChip label="Genre" value={rds.prog_type} />}
-            {rds.artist && <MetaChip label="Artist" value={rds.artist} />}
-            {rds.title && <MetaChip label="Title" value={rds.title} />}
-          </div>
-        </div>
-      )}
-
-      {/* Station info */}
+      {/* Now Playing + Station Info (combined panel) */}
       {power && (
-        <StationInfo
-          callsign={presets.find(p => p.freq === frequency)?.label || `${frequency} FM`}
+        <NowPlayingPanel
           frequency={frequency}
-          format={presets.find(p => p.freq === frequency)?.format || 'FM Broadcast'}
-          unit="MHz"
-          accentColor="#8b5cf6"
-          details={{
-            city: 'Phoenix, AZ',
-            slogan: rds.ps || undefined,
-          }}
+          preset={presets.find(p => p.freq === frequency)}
+          rds={rds}
+          isPlaying={audio.isPlaying}
         />
       )}
 
@@ -184,6 +175,129 @@ function FMRadio() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
+  frequency: number;
+  preset?: StationPreset;
+  rds: Record<string, any>;
+  isPlaying: boolean;
+}) {
+  const hasRDS = Object.keys(rds).length > 0;
+  const hasTrack = rds.artist || rds.title;
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      {/* Now Playing header */}
+      <div className="p-4 border-b border-white/[0.04]">
+        <div className="flex items-center gap-3">
+          <StationLogo callsign={preset?.label || ''} size={44} fallbackColor="#8b5cf6" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-zinc-100">
+                {preset?.label || `${frequency.toFixed(1)} FM`}
+              </h3>
+              {isPlaying && (
+                <div className="flex items-center gap-1">
+                  <div className="w-1 h-1 rounded-full bg-radio animate-pulse" />
+                  <span className="text-2xs text-radio">ON AIR</span>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500">
+              {frequency.toFixed(1)} MHz &middot; {preset?.format || 'FM Broadcast'}
+              {preset?.slogan && <span className="text-zinc-600"> &mdash; {preset.slogan}</span>}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Currently playing track/show */}
+      {hasRDS && (
+        <div className="p-4 bg-radio/[0.02] border-b border-white/[0.04]">
+          {hasTrack ? (
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-radio/10 border border-radio/20 flex items-center justify-center shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-radio">
+                  <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-zinc-500 uppercase tracking-wide">Now Playing</p>
+                <p className="text-sm font-medium text-zinc-100 mt-0.5 truncate">{rds.title || 'Unknown Track'}</p>
+                {rds.artist && <p className="text-xs text-zinc-400 mt-0.5 truncate">{rds.artist}</p>}
+              </div>
+              {rds.prog_type && (
+                <span className="badge bg-radio/10 text-radio text-2xs border border-radio/20 shrink-0">
+                  {rds.prog_type}
+                </span>
+              )}
+            </div>
+          ) : rds.radiotext ? (
+            <div>
+              <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Radio Text</p>
+              <p className="text-sm text-zinc-200">{rds.radiotext}</p>
+            </div>
+          ) : rds.ps ? (
+            <div>
+              <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Station ID</p>
+              <p className="text-sm text-zinc-200 font-medium">{rds.ps}</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* Station details grid */}
+      {preset && (
+        <div className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {preset.city && (
+              <div>
+                <p className="text-2xs text-zinc-600 uppercase tracking-wide">City</p>
+                <p className="text-xs text-zinc-300 mt-0.5">{preset.city}</p>
+              </div>
+            )}
+            {preset.owner && (
+              <div>
+                <p className="text-2xs text-zinc-600 uppercase tracking-wide">Owner</p>
+                <p className="text-xs text-zinc-300 mt-0.5 truncate">{preset.owner}</p>
+              </div>
+            )}
+            {preset.power && (
+              <div>
+                <p className="text-2xs text-zinc-600 uppercase tracking-wide">Power</p>
+                <p className="text-xs text-zinc-300 mt-0.5">{preset.power}</p>
+              </div>
+            )}
+            {preset.website && (
+              <div>
+                <p className="text-2xs text-zinc-600 uppercase tracking-wide">Website</p>
+                <a
+                  href={`https://${preset.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand-bright hover:underline mt-0.5 block truncate"
+                >
+                  {preset.website}
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* RDS raw data (if we have additional fields beyond what's shown above) */}
+      {hasRDS && (rds.pi || rds.pty || rds.tp) && (
+        <div className="px-4 pb-3 pt-0">
+          <div className="flex items-center gap-3 text-2xs text-zinc-600">
+            {rds.pi && <span>PI: {rds.pi}</span>}
+            {rds.pty && <span>PTY: {rds.pty}</span>}
+            {rds.tp && <span>TP: {rds.tp}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

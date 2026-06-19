@@ -6,6 +6,7 @@ import { spawn, ChildProcess, execSync } from 'child_process';
 import hdhrRouter from './hdhr';
 import logosRouter from './logos';
 import newsRouter from './news';
+import recommendationsRouter from './recommendations';
 
 const app = express();
 const PORT = 3001;
@@ -69,6 +70,9 @@ app.use('/api/logos', logosRouter);
 
 // Local news endpoints
 app.use('/api/news', newsRouter);
+
+// Recommendations / featured content endpoints
+app.use('/api/recommendations', recommendationsRouter);
 
 /**
  * Hybrid tuning approach:

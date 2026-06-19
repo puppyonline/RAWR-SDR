@@ -1,7 +1,7 @@
 {
-  "name": "rawr-sdr",
-  "version": "1.0.0",
-  "description": "RTL-SDR Web Radio - FM/AM/ATC/HD Radio and ADS-B Tracker",
+  "name": "airwave",
+  "version": "2.0.0",
+  "description": "Airwave - Your local over-the-air media hub",
   "private": true,
   "type": "module",
   "scripts": {
