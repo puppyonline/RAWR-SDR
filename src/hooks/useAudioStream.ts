@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 
 interface AudioStreamState {
   isPlaying: boolean;
@@ -6,6 +6,14 @@ interface AudioStreamState {
   error: string | null;
 }
 
+/**
+ * Hook for streaming audio from the RTL-SDR backend.
+ * 
+ * Usage: call tune(frequency, mode) to start or retune.
+ * The hook manages the WebSocket, AudioContext, and GainNode internally.
+ * Changing frequency just calls tune() again — the server kills the old
+ * rtl_fm process and starts a new one, audio buffers are flushed.
+ */
 export function useAudioStream() {
   const [state, setState] = useState<AudioStreamState>({
     isPlaying: false,
@@ -19,7 +27,6 @@ export function useAudioStream() {
   const nextTimeRef = useRef(0);
   const bufferQueueRef = useRef<Float32Array[]>([]);
   const processingRef = useRef(false);
-  const currentModeRef = useRef<string>('');
 
   const processQueue = useCallback(() => {
     if (processingRef.current) return;
@@ -50,13 +57,70 @@ export function useAudioStream() {
     processingRef.current = false;
   }, []);
 
-  const start = useCallback(async (frequency: number, mode: string) => {
-    setState({ isPlaying: false, isConnecting: true, error: null });
-    currentModeRef.current = mode;
+  const ensureAudioContext = useCallback(async () => {
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      await audioCtxRef.current.resume();
+    }
+    if (!gainNodeRef.current || gainNodeRef.current.context !== audioCtxRef.current) {
+      gainNodeRef.current = audioCtxRef.current.createGain();
+      gainNodeRef.current.connect(audioCtxRef.current.destination);
+    }
+  }, []);
+
+  const ensureWebSocket = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      return; // already connected
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      setState((prev) => ({ ...prev, isPlaying: true, isConnecting: false }));
+    };
+
+    ws.onmessage = (event) => {
+      if (!(event.data instanceof ArrayBuffer)) return;
+      const int16 = new Int16Array(event.data);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+      bufferQueueRef.current.push(float32);
+      while (bufferQueueRef.current.length > 100) {
+        bufferQueueRef.current.shift();
+      }
+      processQueue();
+    };
+
+    ws.onerror = () => {
+      setState((prev) => ({ ...prev, error: 'WebSocket error' }));
+    };
+
+    ws.onclose = () => {
+      setState((prev) => ({ ...prev, isPlaying: false }));
+    };
+
+    wsRef.current = ws;
+  }, [processQueue]);
+
+  /**
+   * Tune to a frequency. If already playing, this retunes (kills old rtl_fm,
+   * starts new one). If not playing, this starts everything up.
+   */
+  const tune = useCallback(async (frequency: number, mode: string) => {
+    setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
-      // Tell the server to start/retune
-      // Server kills any existing rtl_fm process and starts a new one
+      // Tell server to (re)tune — server handles killing old process
       const res = await fetch('/api/tune', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,101 +129,22 @@ export function useAudioStream() {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Failed to start SDR');
+        throw new Error(err.error || 'Tune failed');
       }
 
-      // Only create AudioContext + WebSocket if not already connected
-      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
-      }
-      if (audioCtxRef.current.state === 'suspended') {
-        await audioCtxRef.current.resume();
-      }
-
-      if (!gainNodeRef.current || gainNodeRef.current.context !== audioCtxRef.current) {
-        gainNodeRef.current = audioCtxRef.current.createGain();
-        gainNodeRef.current.connect(audioCtxRef.current.destination);
-      }
-
-      // Clear stale audio buffers from previous frequency
-      nextTimeRef.current = 0;
+      // Flush stale audio
       bufferQueueRef.current = [];
+      nextTimeRef.current = 0;
 
-      // Only open a new WebSocket if we don't already have one
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws`;
-        const ws = new WebSocket(wsUrl);
-        ws.binaryType = 'arraybuffer';
+      // Ensure audio pipeline is running
+      await ensureAudioContext();
+      ensureWebSocket();
 
-        ws.onopen = () => {
-          setState({ isPlaying: true, isConnecting: false, error: null });
-        };
-
-        ws.onmessage = (event) => {
-          if (!(event.data instanceof ArrayBuffer)) return;
-
-          const int16 = new Int16Array(event.data);
-          const float32 = new Float32Array(int16.length);
-          for (let i = 0; i < int16.length; i++) {
-            float32[i] = int16[i] / 32768;
-          }
-
-          bufferQueueRef.current.push(float32);
-
-          // Cap at ~2s of buffered audio
-          while (bufferQueueRef.current.length > 100) {
-            bufferQueueRef.current.shift();
-          }
-
-          processQueue();
-        };
-
-        ws.onerror = () => {
-          setState((prev) => ({ ...prev, error: 'WebSocket connection error' }));
-        };
-
-        ws.onclose = () => {
-          setState((prev) => ({ ...prev, isPlaying: false }));
-        };
-
-        wsRef.current = ws;
-      } else {
-        // WebSocket already connected, just mark as playing
-        // (server already restarted rtl_fm at new freq)
-        bufferQueueRef.current = [];
-        nextTimeRef.current = 0;
-        setState({ isPlaying: true, isConnecting: false, error: null });
-      }
+      setState({ isPlaying: true, isConnecting: false, error: null });
     } catch (err: any) {
       setState({ isPlaying: false, isConnecting: false, error: err.message });
     }
-  }, [processQueue]);
-
-  /**
-   * Retune to a new frequency without tearing down the WebSocket or AudioContext.
-   * The server will kill the old rtl_fm and start a new one; audio buffers are flushed
-   * so you don't hear stale data from the previous frequency.
-   */
-  const retune = useCallback(async (frequency: number, mode?: string) => {
-    const m = mode || currentModeRef.current;
-    try {
-      const res = await fetch('/api/tune', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frequency, mode: m }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Retune failed');
-      }
-      // Flush old audio so there's no crossover between frequencies
-      bufferQueueRef.current = [];
-      nextTimeRef.current = 0;
-    } catch (err: any) {
-      setState((prev) => ({ ...prev, error: err.message }));
-    }
-  }, []);
+  }, [ensureAudioContext, ensureWebSocket]);
 
   const stop = useCallback(async () => {
     if (wsRef.current) {
@@ -178,7 +163,6 @@ export function useAudioStream() {
     }
 
     bufferQueueRef.current = [];
-    currentModeRef.current = '';
     setState({ isPlaying: false, isConnecting: false, error: null });
   }, []);
 
@@ -190,5 +174,13 @@ export function useAudioStream() {
     }
   }, []);
 
-  return { ...state, start, stop, retune, setVolume };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+      if (audioCtxRef.current) audioCtxRef.current.close();
+    };
+  }, []);
+
+  return { ...state, tune, stop, setVolume };
 }

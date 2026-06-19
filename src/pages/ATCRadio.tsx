@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import FrequencyDial from '../components/FrequencyDial';
 import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
@@ -24,37 +24,39 @@ function ATCRadio() {
   const [squelch, setSquelch] = useState(50);
   const [volume, setVolume] = useState(80);
   const [signalStrength, setSignalStrength] = useState(0);
+  const [power, setPower] = useState(false);
   const audio = useAudioStream();
-  const retuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialTune = useRef(false);
+
+  useEffect(() => { audio.setVolume(volume); }, [volume, audio.setVolume]);
 
   useEffect(() => {
-    audio.setVolume(volume);
-  }, [volume, audio.setVolume]);
+    if (power && !initialTune.current) {
+      initialTune.current = true;
+      audio.tune(frequency, 'atc');
+      setSignalStrength(Math.floor(Math.random() * 40) + 30);
+    }
+    if (!power) initialTune.current = false;
+  }, [power]);
 
-  // Live retune while listening (debounced 300ms)
   useEffect(() => {
-    if (!audio.isPlaying) return;
-    if (retuneTimer.current) clearTimeout(retuneTimer.current);
-    retuneTimer.current = setTimeout(() => {
-      audio.retune(frequency, 'atc');
-      setSignalStrength(Math.floor(Math.random() * 50) + 20);
-    }, 300);
-    return () => { if (retuneTimer.current) clearTimeout(retuneTimer.current); };
-  }, [frequency, audio.isPlaying, audio.retune]);
+    if (!power) return;
+    if (tuneTimer.current) clearTimeout(tuneTimer.current);
+    tuneTimer.current = setTimeout(() => {
+      audio.tune(frequency, 'atc');
+      setSignalStrength(Math.floor(Math.random() * 40) + 30);
+    }, 250);
+    return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
+  }, [frequency]);
 
-  const handleTune = useCallback((freq: number) => {
-    setFrequency(Number(freq.toFixed(3)));
-  }, []);
-
-  const togglePlay = async () => {
-    if (audio.isPlaying) {
+  const togglePower = async () => {
+    if (power) {
+      setPower(false);
       await audio.stop();
       setSignalStrength(0);
     } else {
-      // Pass squelch to server — rtl_fm uses -l flag for squelch threshold
-      await audio.start(frequency, 'atc');
-      audio.setVolume(volume);
-      setSignalStrength(Math.floor(Math.random() * 40) + 40);
+      setPower(true);
     }
   };
 
@@ -65,17 +67,14 @@ function ATCRadio() {
           <div>
             <h2 className="text-lg font-semibold">Air Traffic Control</h2>
             <p className="text-xs text-white/30 font-mono mt-0.5">
-              118.000 &ndash; 136.975 MHz &middot; VHF AM Narrowband
+              118.000 &ndash; 136.975 MHz &middot; VHF AM
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {audio.error && <span className="text-xs text-danger">{audio.error}</span>}
-            <button
-              onClick={togglePlay}
-              disabled={audio.isConnecting}
-              className={audio.isPlaying ? 'btn-danger' : 'btn-primary'}
-            >
-              {audio.isConnecting ? 'Tuning...' : audio.isPlaying ? 'Stop' : 'Listen'}
+          <div className="flex items-center gap-3">
+            {audio.error && <span className="text-xs text-danger mr-2">{audio.error}</span>}
+            {audio.isConnecting && <span className="text-xs text-white/40 mr-2">Tuning...</span>}
+            <button onClick={togglePower} className={power ? 'btn-danger' : 'btn-primary'}>
+              {power ? 'Power Off' : 'Power On'}
             </button>
           </div>
         </div>
@@ -83,7 +82,7 @@ function ATCRadio() {
         <div className="flex items-baseline gap-3 mb-6">
           <span className="freq-display">{frequency.toFixed(3)}</span>
           <span className="text-sm text-white/30">MHz</span>
-          {audio.isPlaying && (
+          {power && audio.isPlaying && (
             <div className="flex items-center gap-1.5 ml-4">
               <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
               <span className="text-xs text-cyan-400/70">Monitoring</span>
@@ -91,18 +90,17 @@ function ATCRadio() {
           )}
         </div>
 
-        <FrequencyDial value={frequency} onChange={handleTune} min={118.0} max={137.0} step={0.005} color="#22d3ee" />
+        <FrequencyDial value={frequency} onChange={(f) => setFrequency(Number(f.toFixed(3)))} min={118.0} max={137.0} step={0.025} color="#22d3ee" />
 
         <div className="flex items-center gap-6 mt-5">
           <div className="flex items-center gap-2">
             <input
-              type="number" min={118.0} max={137.0} step={0.005} value={frequency}
-              onChange={(e) => handleTune(Number(e.target.value))}
+              type="number" min={118.0} max={137.0} step={0.025} value={frequency}
+              onChange={(e) => setFrequency(Number(Number(e.target.value).toFixed(3)))}
               className="input w-32 font-mono text-center text-sm"
             />
             <span className="text-xs text-white/25">MHz</span>
           </div>
-
           <div className="flex items-center gap-3">
             <span className="text-xs text-white/30">Squelch</span>
             <input
@@ -115,7 +113,6 @@ function ATCRadio() {
             />
             <span className="text-xs font-mono text-white/30 w-6">{squelch}</span>
           </div>
-
           <div className="flex-1 flex items-center gap-3">
             <span className="text-xs text-white/30">Vol</span>
             <input
@@ -131,19 +128,11 @@ function ATCRadio() {
         </div>
       </div>
 
-      <div className="card p-4 bg-cyan-500/5 border-cyan-500/10">
-        <p className="text-xs text-cyan-300/70">
-          <strong>Aviation band:</strong> Uses AM modulation at 25 kHz channel spacing.
-          Squelch silences noise between transmissions (higher = more aggressive gating).
-          Frequencies above 121.4 MHz are for upper airspace / en-route control.
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 card p-5">
           <span className="label">Spectrum</span>
           <div className="mt-3">
-            <SpectrumVisualizer isActive={audio.isPlaying} color="#22d3ee" height={130} />
+            <SpectrumVisualizer isActive={power && audio.isPlaying} color="#22d3ee" height={130} />
           </div>
         </div>
         <div className="card p-5">
@@ -153,12 +142,12 @@ function ATCRadio() {
       </div>
 
       <div className="card p-5">
-        <span className="label">Common Aviation Frequencies</span>
+        <span className="label">Aviation Frequencies</span>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-3">
           {commonFreqs.map((f) => (
             <button
               key={f.freq}
-              onClick={() => handleTune(f.freq)}
+              onClick={() => setFrequency(f.freq)}
               className={`card-inner p-3 text-left transition-all hover:border-white/10 ${
                 frequency === f.freq ? 'border-cyan-500/30 bg-cyan-500/5' : ''
               }`}
