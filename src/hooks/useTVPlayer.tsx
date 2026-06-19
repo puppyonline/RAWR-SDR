@@ -162,6 +162,16 @@ export function TVPlayerProvider({ children }: { children: ReactNode }) {
   // Show mini-player when playing and NOT on TV page
   const showMiniPlayer = hasPlayback && !isOnTVPage;
 
+  // Clear any inline styles when leaving the TV page
+  // (TV page sets inline position styles that would conflict with mini-player classes)
+  useEffect(() => {
+    const container = document.getElementById('tv-player-container');
+    if (!container) return;
+    if (!isOnTVPage) {
+      container.style.cssText = '';
+    }
+  }, [isOnTVPage]);
+
   return (
     <TVPlayerCtx.Provider value={{ state, tuneChannel, stopPlayback, videoElementId: VIDEO_ELEMENT_ID }}>
       {children}
