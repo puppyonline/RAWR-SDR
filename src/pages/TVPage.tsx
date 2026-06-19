@@ -41,6 +41,7 @@ function TVPage() {
   const [guide, setGuide] = useState<GuideChannel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [hdhrStatus, setHdhrStatus] = useState<any>(null);
   const [error, setError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -111,17 +112,24 @@ function TVPage() {
       playerRef.current = null;
     }
     setIsPlaying(false);
+    setIsBuffering(true);
+    setError('');
     setSelectedChannel(channel);
 
     // Start mpegts.js player
     const mpegts = await import('mpegts.js');
     if (!mpegts.default.isSupported()) {
       setError('MPEG-TS playback not supported in this browser');
+      setIsBuffering(false);
       return;
     }
 
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) { setIsBuffering(false); return; }
+
+    // Clear buffering when video actually starts playing
+    video.onplaying = () => { setIsBuffering(false); setIsPlaying(true); };
+    video.onwaiting = () => { setIsBuffering(true); };
 
     const player = mpegts.default.createPlayer({
       type: 'mpegts',
@@ -138,13 +146,13 @@ function TVPage() {
     player.load();
     player.play();
     playerRef.current = player;
-    setIsPlaying(true);
     setError('');
 
     // Handle stream errors (e.g. ATSC 3.0 channels returning 503)
     player.on('error', () => {
       setError('Channel unavailable — may be an ATSC 3.0/DRM channel requiring DVR subscription');
       setIsPlaying(false);
+      setIsBuffering(false);
     });
   };
 
@@ -154,6 +162,7 @@ function TVPage() {
       playerRef.current = null;
     }
     setIsPlaying(false);
+    setIsBuffering(false);
     setSelectedChannel(null);
   };
 
@@ -201,11 +210,32 @@ function TVPage() {
               muted={false}
               controls
             />
-            {!isPlaying && (
+            {!isPlaying && !isBuffering && (
               <div className="absolute inset-0 flex items-center justify-center bg-bg-raised">
                 <div className="text-center">
                   <div className="text-4xl mb-2 opacity-30">📺</div>
                   <p className="text-sm text-zinc-500">Select a channel to start watching</p>
+                </div>
+              </div>
+            )}
+            {isBuffering && (
+              <div className="absolute inset-0 flex items-center justify-center bg-bg-raised/95 backdrop-blur-sm">
+                <div className="text-center space-y-4">
+                  {/* Animated signal bars */}
+                  <div className="flex items-end justify-center gap-1 h-10">
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_0ms]" style={{ height: '40%' }} />
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_150ms]" style={{ height: '60%' }} />
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_300ms]" style={{ height: '80%' }} />
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_450ms]" style={{ height: '100%' }} />
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_600ms]" style={{ height: '80%' }} />
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_750ms]" style={{ height: '60%' }} />
+                    <div className="w-2 bg-brand rounded-full animate-[bounce_1s_ease-in-out_infinite_900ms]" style={{ height: '40%' }} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-zinc-200">Tuning to {selectedChannel?.GuideName}</p>
+                    <p className="text-xs text-zinc-500 mt-1">Transcoding stream for browser playback...</p>
+                    <p className="text-2xs text-zinc-600 mt-2">This can take up to 10 seconds</p>
+                  </div>
                 </div>
               </div>
             )}
