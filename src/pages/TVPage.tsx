@@ -506,9 +506,30 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
   const upcoming = entries.filter((e) => e.StartTime > now).slice(0, 5);
   const network = channelMeta[channel.GuideNumber.split('.')[0]]?.network;
 
-  // Strip common suffixes to get the base callsign for Wikipedia lookup
-  // e.g., "KTVK-HD" -> "KTVK", "KSAZ-DT" -> "KSAZ"
-  const baseCallsign = channel.GuideName.replace(/[- ]?(HD|DT|SD|TV|LP|\d+)$/i, '').trim();
+  // Map branded display names to FCC callsigns for Wikipedia lookup
+  // HDHomeRun guide uses display names like "ABC15" but Wikipedia articles are under callsigns like "KNXV-TV"
+  const callsignMap: Record<string, string> = {
+    'ABC15': 'KNXV-TV',
+    'FOX 10': 'KSAZ-TV',
+    'FOX10': 'KSAZ-TV',
+    '12 News': 'KPNX',
+    '12News': 'KPNX',
+    'CBS 5': 'KPHO-TV',
+    'azfamily': 'KTVK',
+    "Arizona's Family": 'KTVK',
+    'CW61': 'KASW',
+    'PBS': 'KAET',
+    'ION': 'KPPX-TV',
+    'Univision': 'KTVW-DT',
+    'Telemundo': 'KTAZ',
+  };
+
+  // Try the callsign map first, then strip suffixes
+  const rawName = channel.GuideName;
+  const mappedCallsign = Object.entries(callsignMap).find(
+    ([key]) => rawName.toLowerCase().includes(key.toLowerCase())
+  )?.[1];
+  const baseCallsign = mappedCallsign || rawName.replace(/[- ]?(HD|DT|SD|TV|LP|\d+)$/i, '').trim();
 
   // Fetch rich data
   const showInfo = useTVShowInfo(current?.Title);
