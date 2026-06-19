@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  }
+
+  .glass-panel-sm {
+    @apply bg-white/10 backdrop-blur-lg border border-white/15 rounded-xl;
+    box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
+  }
+
+  .glass-button {
+    @apply px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg
+           hover:bg-white/20 transition-all duration-200 text-white font-medium;
+  }
+
+  .glass-input {
+    @apply px-4 py-2 bg-white/5 backdrop-blur-sm border border-white/20 rounded-lg
+           focus:border-purple-400/50 focus:outline-none focus:ring-2 focus:ring-purple-400/20
+           text-white placeholder-white/40 transition-all duration-200;
+  }
+
+  .nav-link {
+    @apply px-4 py-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10
+           transition-all duration-200 font-medium text-sm;
+  }
+
+  .nav-link-active {
+    @apply px-4 py-2 rounded-lg text-white bg-white/15 border border-white/20
+           font-medium text-sm;
+  }
+}
