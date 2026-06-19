@@ -52,12 +52,12 @@ function HDRadio() {
   // Listen for metadata from nrsc5 via WebSocket
   useEffect(() => {
     audio.onRDS((data) => {
-      setMetadata((prev) => ({
-        station: data.ps || prev.station,
-        artist: data.artist || prev.artist,
-        title: data.title || prev.title,
-        genre: data.genre || prev.genre,
-      }));
+      setMetadata({
+        station: data.ps || '---',
+        artist: data.artist || '---',
+        title: data.title || '---',
+        genre: data.genre || '---',
+      });
     });
   }, [audio.onRDS]);
 
@@ -75,8 +75,8 @@ function HDRadio() {
     if (!power || !initialTune.current) return;
     if (tuneTimer.current) clearTimeout(tuneTimer.current);
     tuneTimer.current = setTimeout(() => {
+      setMetadata({ station: '---', artist: '---', title: '---', genre: '---' });
       audio.tune(frequency, 'hd', { hdChannel: hdChannel - 1 });
-      setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Syncing...', title: '...', genre: '...' });
     }, 800); // longer debounce for HD (nrsc5 needs more USB release time)
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency, hdChannel]);
