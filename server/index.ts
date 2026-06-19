@@ -155,7 +155,8 @@ app.post('/api/tune', async (req, res) => {
       args.push(
         '-M', 'am',
         '-f', `${frequency}k`,
-        '-s', '48k',            // 48kHz directly (no resample needed, avoids Windows heap crash)
+        '-s', '240k',           // 240kHz hardware rate (min for RTL-SDR is ~225k)
+        '-r', '48000',          // resample 240k -> 48k (clean 5:1 ratio)
         '-l', '0',
         '-g', '0',
         '-E', 'direct',
@@ -166,7 +167,8 @@ app.post('/api/tune', async (req, res) => {
       args.push(
         '-M', 'am',
         '-f', `${frequency}M`,
-        '-s', '48k',            // 48kHz directly (no -r resample)
+        '-s', '240k',           // 240kHz hardware rate
+        '-r', '48000',          // resample 240k -> 48k (clean 5:1)
         '-l', String(squelch || 50),
         '-g', '0',
         '-p', '0',
