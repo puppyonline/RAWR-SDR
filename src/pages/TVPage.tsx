@@ -80,6 +80,7 @@ function TVPage() {
   };
 
   const tuneChannel = async (channel: Channel) => {
+    // Stop current playback
     if (playerRef.current) {
       playerRef.current.destroy();
       playerRef.current = null;
@@ -87,49 +88,32 @@ function TVPage() {
     setIsPlaying(false);
     setSelectedChannel(channel);
 
+    // Start mpegts.js player
+    const mpegts = await import('mpegts.js');
+    if (!mpegts.default.isSupported()) {
+      setError('MPEG-TS playback not supported in this browser');
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
 
-    try {
-      const mpegts = await import('mpegts.js');
-      if (mpegts.default.isSupported()) {
-        const player = mpegts.default.createPlayer({
-          type: 'mpegts',
-          isLive: true,
-          url: `${window.location.origin}/api/hdhr/stream/${channel.GuideNumber}`,
-        }, {
-          enableWorker: true,
-          liveBufferLatencyChasing: false,
-          autoCleanupSourceBuffer: true,
-          autoCleanupMaxBackwardDuration: 60,
-          autoCleanupMinBackwardDuration: 30,
-          fixAudioTimestampGap: true,
-        });
+    const player = mpegts.default.createPlayer({
+      type: 'mpegts',
+      isLive: true,
+      url: `${window.location.origin}/api/hdhr/stream/${channel.GuideNumber}`,
+    }, {
+      enableWorker: true,
+      liveBufferLatencyChasing: true,
+      liveBufferLatencyMaxLatency: 3,
+      liveBufferLatencyMinRemain: 0.5,
+    });
 
-        player.attachMediaElement(video);
-        player.load();
-        player.play();
-        playerRef.current = player;
-        setIsPlaying(true);
-      }
-    } catch (e: any) {
-      setError(e.message || 'Playback failed');
-    }
-  };
-
-  const openInVLC = () => {
-    if (!selectedChannel) return;
-    // Get direct stream URL and open with VLC protocol
-    fetch(`/api/hdhr/streamurl/${selectedChannel.GuideNumber}`)
-      .then(r => r.json())
-      .then(d => { window.open(`vlc://${d.url}`, '_blank'); });
-  };
-
-  const copyStreamURL = () => {
-    if (!selectedChannel) return;
-    fetch(`/api/hdhr/streamurl/${selectedChannel.GuideNumber}`)
-      .then(r => r.json())
-      .then(d => { navigator.clipboard.writeText(d.url); });
+    player.attachMediaElement(video);
+    player.load();
+    player.play();
+    playerRef.current = player;
+    setIsPlaying(true);
   };
 
   const stopPlayback = () => {
@@ -212,16 +196,6 @@ function TVPage() {
             </div>
           )}
         </div>
-
-        {/* External player buttons */}
-        {selectedChannel && (
-          <div className="p-3 border-t border-white/[0.06] flex items-center gap-2">
-            <button onClick={openInVLC} className="btn-ghost text-xs">Open in VLC</button>
-            <button onClick={copyStreamURL} className="btn-ghost text-xs">Copy URL</button>
-            <span className="text-[10px] text-white/25 ml-2">Use external player for best quality</span>
-          </div>
-        )}
-      </div>
 
         {/* Channel List */}
         <div className="card p-0 max-h-[600px] overflow-y-auto">

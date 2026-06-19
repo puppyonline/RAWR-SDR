@@ -157,13 +157,15 @@ router.get('/guide', async (_req: Request, res: Response) => {
 });
 
 // GET /api/hdhr/stream/:channel
-// Transcodes via ffmpeg at 720p for smooth in-browser playback.
-// ATSC is MPEG-2+AC3 which browsers can't play natively.
+// Proxies the MPEG-TS stream from the HDHomeRun through ffmpeg for browser compatibility.
+// ATSC OTA can be MPEG-2+AC3 which browsers don't support. ffmpeg transcodes to H.264+AAC.
 router.get('/stream/:channel', async (req: Request, res: Response) => {
   const device = await discoverDevice();
   if (!device) return res.status(404).json({ error: 'No device' });
 
   const channel = req.params.channel;
+
+  // Get stream URL from lineup
   let streamUrl = '';
   if (cachedLineup.length > 0) {
     const ch = cachedLineup.find((c: any) => c.GuideNumber === channel);
@@ -171,39 +173,37 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
   }
   if (!streamUrl) streamUrl = `${device.BaseURL}/auto/v${channel}`;
 
-  console.log(`[HDHR] Streaming via ffmpeg (720p): ${streamUrl}`);
+  console.log(`[HDHR] Streaming via ffmpeg: ${streamUrl}`);
 
   res.setHeader('Content-Type', 'video/mp2t');
   res.setHeader('Cache-Control', 'no-cache, no-store');
   res.setHeader('Connection', 'keep-alive');
 
+  // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
   const ffmpeg = spawn(ffmpegPath, [
-    '-analyzeduration', '2000000',
-    '-probesize', '2000000',
     '-i', streamUrl,
-    '-vf', 'yadif=0,scale=1280:720', // deinterlace + 720p (much less CPU than 1080)
     '-c:v', 'libx264',
-    '-preset', 'superfast',
-    '-profile:v', 'main',
-    '-level', '4.0',
-    '-r', '30',
-    '-b:v', '2000k',
-    '-maxrate', '2500k',
-    '-bufsize', '5000k',
-    '-g', '60',
+    '-preset', 'veryfast',
+    '-tune', 'zerolatency',
+    '-profile:v', 'baseline',    // most compatible H.264 profile
+    '-level', '3.1',
+    '-g', '30',                  // keyframe every 30 frames (1 sec at 30fps)
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-ar', '44100',
-    '-ac', '2',
+    '-ar', '44100',              // standard audio sample rate
+    '-ac', '2',                  // stereo
     '-f', 'mpegts',
-    '-mpegts_flags', 'resend_headers',
+    '-mpegts_flags', 'resend_headers', // resend PAT/PMT periodically
     'pipe:1',
-  ], { stdio: ['pipe', 'pipe', 'pipe'] });
+  ], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
 
   ffmpeg.stdout?.pipe(res);
 
   ffmpeg.stderr?.on('data', (data: Buffer) => {
     const msg = data.toString().trim();
+    // Only log errors, not the constant progress output
     if (msg.includes('Error') || msg.includes('error')) {
       console.error(`[ffmpeg] ${msg.slice(0, 200)}`);
     }
@@ -211,7 +211,7 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
 
   ffmpeg.on('error', (err) => {
     console.error(`[ffmpeg] Spawn error: ${err.message}`);
-    if (!res.headersSent) res.status(500).json({ error: 'ffmpeg not available' });
+    if (!res.headersSent) res.status(500).json({ error: 'ffmpeg not found. Install ffmpeg for TV streaming.' });
   });
 
   ffmpeg.on('close', (code) => {
@@ -219,23 +219,9 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
     res.end();
   });
 
-  req.on('close', () => { ffmpeg.kill('SIGTERM'); });
-});
-
-// GET /api/hdhr/streamurl/:channel - returns direct URL for external players
-router.get('/streamurl/:channel', async (req: Request, res: Response) => {
-  const device = await discoverDevice();
-  if (!device) return res.status(404).json({ error: 'No device' });
-
-  const channel = req.params.channel;
-  let streamUrl = '';
-  if (cachedLineup.length > 0) {
-    const ch = cachedLineup.find((c: any) => c.GuideNumber === channel);
-    if (ch?.URL) streamUrl = ch.URL;
-  }
-  if (!streamUrl) streamUrl = `${device.BaseURL}/auto/v${channel}`;
-
-  res.json({ channel, url: streamUrl });
+  req.on('close', () => {
+    ffmpeg.kill('SIGTERM');
+  });
 });
 
 // GET /api/hdhr/status
