@@ -13,6 +13,48 @@
     @apply bg-bg text-zinc-100 antialiased font-sans;
   }
 
+  /* Theme: Dark (default) */
+  :root, [data-theme="dark"] {
+    --color-bg: #09090b;
+    --color-bg-raised: #111114;
+    --color-bg-card: #16161a;
+    --color-bg-hover: #1c1c22;
+    --color-bg-border: #27272a;
+    --color-text: #f4f4f5;
+    --color-text-muted: #a1a1aa;
+  }
+
+  /* Theme: Light */
+  [data-theme="light"] {
+    --color-bg: #f8fafc;
+    --color-bg-raised: #ffffff;
+    --color-bg-card: #ffffff;
+    --color-bg-hover: #f1f5f9;
+    --color-bg-border: #e2e8f0;
+    --color-text: #0f172a;
+    --color-text-muted: #64748b;
+  }
+  [data-theme="light"] body {
+    @apply bg-[var(--color-bg)] text-[var(--color-text)];
+  }
+  [data-theme="light"] .card {
+    @apply bg-[var(--color-bg-card)] border-[var(--color-bg-border)] shadow-sm;
+  }
+  [data-theme="light"] .card-inner {
+    @apply bg-[var(--color-bg-raised)] border-[var(--color-bg-border)];
+  }
+
+  /* Theme: OLED */
+  [data-theme="oled"] {
+    --color-bg: #000000;
+    --color-bg-raised: #0a0a0a;
+    --color-bg-card: #0d0d0d;
+    --color-bg-hover: #141414;
+    --color-bg-border: #1a1a1a;
+    --color-text: #fafafa;
+    --color-text-muted: #888888;
+  }
+
   ::-webkit-scrollbar {
     @apply w-1.5;
   }

@@ -7,6 +7,7 @@ import ATCRadio from './pages/ATCRadio';
 import HDRadio from './pages/HDRadio';
 import ADSBTracker from './pages/ADSBTracker';
 import TVPage from './pages/TVPage';
+import TVGuide from './pages/TVGuide';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="atc" element={<ATCRadio />} />
         <Route path="hd" element={<HDRadio />} />
         <Route path="tv" element={<TVPage />} />
+        <Route path="guide" element={<TVGuide />} />
         <Route path="adsb" element={<ADSBTracker />} />
       </Route>
     </Routes>

@@ -1,116 +1,111 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import ThemePicker from './ThemePicker';
 
-const navGroups = [
-  {
-    label: 'Radio',
-    color: 'text-radio',
-    items: [
-      { path: '/fm', label: 'FM Broadcast' },
-      { path: '/am', label: 'AM Broadcast' },
-      { path: '/hd', label: 'HD Radio' },
-    ],
-  },
-  {
-    label: 'Television',
-    color: 'text-tv',
-    items: [
-      { path: '/tv', label: 'Live TV' },
-    ],
-  },
-  {
-    label: 'Aviation',
-    color: 'text-aviation',
-    items: [
-      { path: '/atc', label: 'ATC Scanner' },
-      { path: '/adsb', label: 'ADS-B Tracker' },
-    ],
-  },
+const navLinks = [
+  { path: '/', label: 'Home' },
+  { path: '/fm', label: 'FM' },
+  { path: '/am', label: 'AM' },
+  { path: '/hd', label: 'HD Radio' },
+  { path: '/tv', label: 'Live TV' },
+  { path: '/guide', label: 'TV Guide' },
+  { path: '/atc', label: 'ATC' },
+  { path: '/adsb', label: 'ADS-B' },
 ];
 
 function Layout() {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-60 flex flex-col border-r border-bg-border bg-bg-card shrink-0">
+    <div className="flex flex-col h-screen overflow-hidden">
+      {/* Top navigation bar */}
+      <header className="h-14 shrink-0 border-b border-bg-border bg-bg-card flex items-center px-4 gap-4 z-50">
         {/* Brand */}
-        <div className="px-5 py-5">
-          <NavLink to="/" className="block group">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-brand-bright">
-                  <path d="M2 12h2M20 12h2M6.34 6.34l1.42 1.42M16.24 16.24l1.42 1.42M6.34 17.66l1.42-1.42M16.24 7.76l1.42-1.42M12 2v2M12 20v2" />
-                  <circle cx="12" cy="12" r="4" />
-                </svg>
-              </div>
-              <div>
-                <span className="text-sm font-bold text-zinc-100 group-hover:text-brand-bright transition-colors">Airwave</span>
-                <p className="text-2xs text-zinc-600">Local Media Hub</p>
-              </div>
-            </div>
-          </NavLink>
-        </div>
+        <NavLink to="/" className="flex items-center gap-2 shrink-0 mr-2">
+          <div className="w-7 h-7 rounded-md bg-brand/10 border border-brand/20 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-bright">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" />
+            </svg>
+          </div>
+          <span className="text-sm font-bold text-zinc-100 hidden sm:block">Airwave</span>
+        </NavLink>
 
-        {/* Navigation groups */}
-        <nav className="flex-1 px-3 pb-4 space-y-5 overflow-y-auto">
-          {navGroups.map((group) => (
-            <div key={group.label}>
-              <p className={`label px-3 mb-1.5 ${group.color}`}>{group.label}</p>
-              <div className="space-y-0.5">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) => isActive ? 'nav-item-active' : 'nav-item'}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
+        {/* Desktop nav links */}
+        <nav className="hidden md:flex items-center gap-1 flex-1">
+          {navLinks.map((link) => (
+            <NavLink
+              key={link.path}
+              to={link.path}
+              end={link.path === '/'}
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-brand/10 text-brand-bright border border-brand/20'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-bg-hover'
+                }`
+              }
+            >
+              {link.label}
+            </NavLink>
           ))}
         </nav>
 
-        {/* Device status footer */}
-        <div className="px-3 py-3 border-t border-bg-border">
-          <div className="card-inner p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-zinc-500">SDR</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-live animate-pulse-live" />
-                <span className="text-2xs text-live">Online</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-zinc-500">HDHomeRun</span>
-              <span className="text-2xs text-zinc-400">Flex 4K</span>
-            </div>
+        {/* Right side */}
+        <div className="flex items-center gap-3 ml-auto">
+          <div className="hidden sm:flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-live animate-pulse-live" />
+            <span className="text-2xs text-zinc-500">Mesa, AZ</span>
           </div>
+          <ThemePicker />
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="md:hidden p-1.5 rounded-md hover:bg-bg-hover text-zinc-400"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {mobileOpen ? <path d="M18 6L6 18M6 6l12 12" /> : <path d="M3 12h18M3 6h18M3 18h18" />}
+            </svg>
+          </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="h-12 flex items-center justify-between px-5 border-b border-bg-border bg-bg-card/60 backdrop-blur-sm shrink-0">
-          <span className="text-sm text-zinc-400">
-            {navGroups.flatMap(g => g.items).find(i => i.path === location.pathname)?.label
-              || (location.pathname === '/' ? 'Home' : '')}
-          </span>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-live" />
-              <span className="text-2xs text-zinc-500">Mesa, AZ</span>
-            </div>
-          </div>
-        </header>
+      {/* Mobile sidebar overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setMobileOpen(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <aside
+            className="absolute top-14 left-0 w-64 h-[calc(100%-3.5rem)] bg-bg-card border-r border-bg-border p-4 overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <nav className="space-y-1">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.path}
+                  to={link.path}
+                  end={link.path === '/'}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    `block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-brand/10 text-brand-bright border border-brand/20'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-bg-hover'
+                    }`
+                  }
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </nav>
+          </aside>
+        </div>
+      )}
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-5">
-          <Outlet />
-        </main>
-      </div>
+      {/* Main content */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-5">
+        <Outlet />
+      </main>
     </div>
   );
 }

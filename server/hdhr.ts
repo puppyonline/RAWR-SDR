@@ -238,3 +238,15 @@ router.get('/status', async (_req: Request, res: Response) => {
 });
 
 export default router;
+
+// Pre-fetch device info and lineup on startup for faster initial load
+setTimeout(async () => {
+  try {
+    const device = await discoverDevice();
+    if (device) {
+      const lineup = await fetchJSON(`${device.BaseURL}/lineup.json`);
+      cachedLineup = lineup;
+      console.log(`[HDHR] Pre-fetched lineup: ${lineup.length} channels`);
+    }
+  } catch { /* non-critical */ }
+}, 500);
