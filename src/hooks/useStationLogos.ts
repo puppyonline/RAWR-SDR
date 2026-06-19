@@ -71,25 +71,24 @@ export function useStationLogos(callsigns: string[]): Record<string, string | nu
 }
 
 /**
- * TV network logos - fetched dynamically from multiple sources:
- * 1. HDHomeRun guide API includes ImageURL per channel
- * 2. Logo.dev free API: https://img.logo.dev/{domain} (no key for basic use)
- * 3. Static fallback map for major networks
+ * TV network logos - uses Hunter.io's free Logo API (no key, no signup needed)
+ * Format: https://logos.hunter.io/{domain}
+ * Returns high-quality company logos as PNG images.
  */
 export const tvNetworkLogos: Record<string, string> = {
-  'ABC': 'https://img.logo.dev/abc.com?format=png&size=64',
-  'CBS': 'https://img.logo.dev/cbs.com?format=png&size=64',
-  'NBC': 'https://img.logo.dev/nbc.com?format=png&size=64',
-  'FOX': 'https://img.logo.dev/fox.com?format=png&size=64',
-  'PBS': 'https://img.logo.dev/pbs.org?format=png&size=64',
-  'CW': 'https://img.logo.dev/cwtv.com?format=png&size=64',
-  'Univision': 'https://img.logo.dev/univision.com?format=png&size=64',
-  'Telemundo': 'https://img.logo.dev/telemundo.com?format=png&size=64',
-  'ION': 'https://img.logo.dev/iontelevision.com?format=png&size=64',
-  'MyNetwork': 'https://img.logo.dev/mynetworktv.com?format=png&size=64',
+  'ABC': 'https://logos.hunter.io/abc.com',
+  'CBS': 'https://logos.hunter.io/cbs.com',
+  'NBC': 'https://logos.hunter.io/nbc.com',
+  'FOX': 'https://logos.hunter.io/fox.com',
+  'PBS': 'https://logos.hunter.io/pbs.org',
+  'CW': 'https://logos.hunter.io/cwtv.com',
+  'Univision': 'https://logos.hunter.io/univision.com',
+  'Telemundo': 'https://logos.hunter.io/telemundo.com',
+  'ION': 'https://logos.hunter.io/iontelevision.com',
+  'MyNetwork': 'https://logos.hunter.io/mynetworktv.com',
 };
 
-// Map channel names/callsigns to their website domains for Logo.dev lookup
+// Map channel names/callsigns to their website domains for logo lookup
 const stationDomains: Record<string, string> = {
   'KTVK': 'azfamily.com',
   'KPHO': 'azfamily.com',
@@ -98,18 +97,17 @@ const stationDomains: Record<string, string> = {
   'KSAZ': 'fox10phoenix.com',
   'KASW': 'azfamily.com',
   'KAET': 'azpbs.org',
-  'KUTP': 'myfoxphoenix.com',
+  'KUTP': 'fox10phoenix.com',
   'KTVW': 'univision.com',
-  'KTAZ': 'telemundoarizona.com',
+  'KTAZ': 'telemundo.com',
 };
 
 /** Get a TV station logo URL by callsign or channel name */
 export function getTVStationLogo(nameOrCallsign: string): string | null {
-  // Check if we have a known domain for this station
   const upper = nameOrCallsign.toUpperCase().replace(/-.*$/, '');
   const domain = stationDomains[upper];
   if (domain) {
-    return `https://img.logo.dev/${domain}?format=png&size=64`;
+    return `https://logos.hunter.io/${domain}`;
   }
 
   // Try matching against network names
