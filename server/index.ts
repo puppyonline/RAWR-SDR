@@ -209,7 +209,8 @@ app.post('/api/tune', async (req, res) => {
 
       // rtl_sdr syntax: rtl_sdr [options] filename
       // '-' means stdout. Must be LAST argument.
-      const args = ['-D', '2', '-s', '240000', '-f', String(freqHz), '-g', '30', '-S', '-'];
+      // This build uses -O 'ds=1' for direct sampling (not -D)
+      const args = ['-O', 'ds=1', '-s', '240000', '-f', String(freqHz), '-g', '30', '-S', '-'];
 
       console.log(`[RAWR-SDR] AM: ${rtlSdr} ${args.join(' ')}`);
       activeProcess = spawn(rtlSdr, args, { stdio: ['pipe', 'pipe', 'pipe'] });
