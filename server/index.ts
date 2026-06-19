@@ -191,6 +191,11 @@ app.post('/api/tune', async (req, res) => {
           else if (trimmed.startsWith('Station name:')) currentRDS.ps = trimmed.slice(14).trim();
           else if (trimmed.startsWith('Slogan:')) currentRDS.slogan = trimmed.slice(8).trim();
           else if (trimmed.startsWith('Audio bit rate:')) currentRDS.bitrate = trimmed.slice(16).trim();
+          else if (trimmed.startsWith('Audio program 0:')) {
+            // Extract genre from "Audio program 0: public, type: Top 40, sound experience 0"
+            const typeMatch = trimmed.match(/type:\s*([^,]+)/);
+            if (typeMatch) currentRDS.genre = typeMatch[1].trim();
+          }
           else if (trimmed.startsWith('Synchronized')) currentRDS.synced = true;
           else if (trimmed.startsWith('Lost sync')) currentRDS.synced = false;
 
