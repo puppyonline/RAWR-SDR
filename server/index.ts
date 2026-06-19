@@ -157,7 +157,7 @@ app.post('/api/tune', async (req, res) => {
         '-f', `${frequency}k`,
         '-s', '240k',           // 240kHz hardware rate
         '-l', '0',
-        '-g', '0',
+        '-g', '30',
         '-E', 'direct',
       );
       break;
@@ -168,7 +168,7 @@ app.post('/api/tune', async (req, res) => {
         '-f', `${frequency}M`,
         '-s', '240k',           // 240kHz hardware rate
         '-l', String(squelch || 50),
-        '-g', '0',
+        '-g', '30',
         '-p', '0',
       );
       break;
@@ -337,12 +337,6 @@ wss.on('connection', (ws) => {
   }
   ws.on('close', () => {
     console.log('[WS] Client disconnected');
-    if (wss.clients.size === 0 && activeProcess) {
-      console.log('[WS] No clients, stopping');
-      if (redseaProcess) { redseaProcess.kill('SIGTERM'); redseaProcess = null; }
-      activeProcess.kill('SIGTERM');
-      activeProcess = null;
-    }
   });
 });
 
