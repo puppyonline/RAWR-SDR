@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { tvNetworkLogos, getTVStationLogo } from '../hooks/useStationLogos';
-import { useTVShowInfo } from '../hooks/useMetadata';
+import { useTVShowInfo, useWikiSummary } from '../hooks/useMetadata';
 
 interface Channel {
   GuideNumber: string;
@@ -280,6 +280,15 @@ function TVPage() {
           </div>
         </div>
       </div>
+
+      {/* Channel Info Panel — shows when tuned */}
+      {selectedChannel && (
+        <ChannelInfoPanel
+          channel={selectedChannel}
+          guide={guide}
+          channelMeta={channelMeta}
+        />
+      )}
     </div>
   );
 }
@@ -458,6 +467,213 @@ function PlayerOverlay({ videoRef, isPlaying, isBuffering, selectedChannel, guid
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Channel Info Panel ──────────────────────────────────────────────────────
+// Rich info about the tuned channel: schedule, show details, network info
+
+function ChannelInfoPanel({ channel, guide, channelMeta }: {
+  channel: Channel;
+  guide: GuideChannel[];
+  channelMeta: Record<string, { network: string; color: string; logo?: string }>;
+}) {
+  const now = Math.floor(Date.now() / 1000);
+  const guideChannel = guide.find((g) => g.GuideNumber === channel.GuideNumber);
+  const entries = guideChannel?.Guide || [];
+  const current = entries.find((e) => e.StartTime <= now && e.EndTime > now);
+  const upcoming = entries.filter((e) => e.StartTime > now).slice(0, 5);
+  const network = channelMeta[channel.GuideNumber.split('.')[0]]?.network;
+
+  // Fetch rich data
+  const showInfo = useTVShowInfo(current?.Title);
+  const stationWiki = useWikiSummary(channel.GuideName);
+  const networkWiki = useWikiSummary(network && network !== 'IND' ? `${network} (TV network)` : undefined);
+
+  const formatTime = (epoch: number) =>
+    new Date(epoch * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      {/* Now Playing — detailed show info */}
+      <div className="lg:col-span-2 space-y-3">
+        {/* Current show details */}
+        {current && showInfo && (
+          <div className="card p-5">
+            <div className="flex items-start gap-4">
+              {showInfo.image && (
+                <img
+                  src={showInfo.image}
+                  alt={showInfo.name}
+                  className="w-24 h-36 rounded-lg object-cover shrink-0 shadow-lg ring-1 ring-white/10"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-2xs text-tv uppercase tracking-wide font-medium">Now Playing</span>
+                  {showInfo.status && (
+                    <span className="text-2xs text-zinc-500">{showInfo.status}</span>
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-zinc-100">{showInfo.name}</h3>
+                {current.EpisodeTitle && (
+                  <p className="text-sm text-zinc-400 mt-0.5">&ldquo;{current.EpisodeTitle}&rdquo;</p>
+                )}
+
+                {/* Metadata row */}
+                <div className="flex items-center gap-3 mt-2.5 flex-wrap">
+                  {showInfo.rating && (
+                    <span className="flex items-center gap-1 text-sm text-yellow-400 font-medium">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      {showInfo.rating}/10
+                    </span>
+                  )}
+                  {showInfo.genres.map((g) => (
+                    <span key={g} className="text-xs text-zinc-400 bg-white/[0.04] rounded-md px-2 py-0.5">{g}</span>
+                  ))}
+                  {showInfo.runtime && (
+                    <span className="text-xs text-zinc-500">{showInfo.runtime} min</span>
+                  )}
+                  {showInfo.premiered && (
+                    <span className="text-xs text-zinc-500">Since {showInfo.premiered.split('-')[0]}</span>
+                  )}
+                </div>
+
+                {/* Synopsis */}
+                {showInfo.summary && (
+                  <p className="text-sm text-zinc-400 mt-3 leading-relaxed line-clamp-4">{showInfo.summary}</p>
+                )}
+
+                {/* Link to TVmaze */}
+                {showInfo.url && (
+                  <a href={showInfo.url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-brand-bright hover:underline mt-2 inline-block">
+                    More on TVmaze &rarr;
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Cast */}
+            {showInfo.cast.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-white/[0.04]">
+                <span className="text-2xs text-zinc-500 uppercase tracking-wide">Cast</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mt-2.5">
+                  {showInfo.cast.map((c) => (
+                    <div key={c.name} className="flex flex-col items-center text-center">
+                      {c.image ? (
+                        <img src={c.image} alt={c.name} className="w-12 h-12 rounded-full object-cover ring-1 ring-white/10 mb-1.5" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-bg-raised ring-1 ring-white/10 mb-1.5 flex items-center justify-center">
+                          <span className="text-xs text-zinc-500">{c.name.charAt(0)}</span>
+                        </div>
+                      )}
+                      <span className="text-xs text-zinc-300 truncate w-full">{c.name}</span>
+                      <span className="text-2xs text-zinc-600 truncate w-full">{c.character}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Current show synopsis from guide (fallback when no TVmaze data) */}
+        {current && !showInfo && current.Synopsis && (
+          <div className="card p-5">
+            <span className="text-2xs text-tv uppercase tracking-wide font-medium">Now Playing</span>
+            <h3 className="text-base font-semibold text-zinc-100 mt-1">{current.Title}</h3>
+            {current.EpisodeTitle && <p className="text-sm text-zinc-400 mt-0.5">{current.EpisodeTitle}</p>}
+            <p className="text-sm text-zinc-400 mt-2 leading-relaxed">{current.Synopsis}</p>
+          </div>
+        )}
+
+        {/* Station/Network Wikipedia info */}
+        {(stationWiki || networkWiki) && (
+          <div className="card p-5">
+            <span className="text-2xs text-zinc-500 uppercase tracking-wide">About {stationWiki ? channel.GuideName : network}</span>
+            <div className="flex items-start gap-3 mt-2">
+              {(stationWiki?.thumbnail || networkWiki?.thumbnail) && (
+                <img
+                  src={(stationWiki?.thumbnail || networkWiki?.thumbnail)!}
+                  alt=""
+                  className="w-12 h-12 rounded-lg object-cover shrink-0"
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-zinc-300 leading-relaxed line-clamp-4">
+                  {stationWiki?.extract || networkWiki?.extract}
+                </p>
+                {(stationWiki?.url || networkWiki?.url) && (
+                  <a href={(stationWiki?.url || networkWiki?.url)!} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-brand-bright hover:underline mt-2 inline-block">
+                    Wikipedia &rarr;
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Right column: upcoming schedule */}
+      <div className="space-y-3">
+        {/* Upcoming shows */}
+        {upcoming.length > 0 && (
+          <div className="card p-4">
+            <span className="label">Coming Up on {channel.GuideName}</span>
+            <div className="space-y-2 mt-3">
+              {upcoming.map((prog, i) => {
+                const duration = Math.round((prog.EndTime - prog.StartTime) / 60);
+                return (
+                  <div key={i} className="card-inner p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-zinc-200 truncate">{prog.Title}</p>
+                        {prog.EpisodeTitle && (
+                          <p className="text-2xs text-zinc-500 truncate mt-0.5">{prog.EpisodeTitle}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-zinc-400 font-mono">{formatTime(prog.StartTime)}</p>
+                        <p className="text-2xs text-zinc-600">{duration} min</p>
+                      </div>
+                    </div>
+                    {prog.Synopsis && (
+                      <p className="text-2xs text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">{prog.Synopsis}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Channel info card */}
+        <div className="card p-4">
+          <span className="label">Channel Info</span>
+          <div className="space-y-2 mt-3">
+            <InfoRow label="Channel" value={`${channel.GuideNumber} — ${channel.GuideName}`} />
+            {network && <InfoRow label="Network" value={network} />}
+            <InfoRow label="Type" value="OTA Broadcast (ATSC)" />
+            <InfoRow label="Source" value="HDHomeRun Flex 4K" />
+            {showInfo?.network && showInfo.network !== network && (
+              <InfoRow label="Production" value={showInfo.network} />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-2xs text-zinc-500">{label}</span>
+      <span className="text-xs text-zinc-300">{value}</span>
     </div>
   );
 }
