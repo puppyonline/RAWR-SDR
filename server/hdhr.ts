@@ -17,6 +17,7 @@
 import { Router, Request, Response } from 'express';
 import http from 'http';
 import https from 'https';
+import { spawn } from 'child_process';
 
 const router = Router();
 
@@ -34,20 +35,15 @@ const GUIDE_CACHE_MS = 15 * 60 * 1000; // 15 min cache
 async function discoverDevice(): Promise<any> {
   if (cachedDevice) return cachedDevice;
 
-  const hosts = ['hdhomerun.local', '192.168.1.255'];
+  const hosts = ['hdhomerun.local'];
 
   for (const host of hosts) {
     try {
       const data = await fetchJSON(`http://${host}/discover.json`);
       if (data && data.DeviceID) {
-        // Prefer the BaseURL from the device response, or use LocalIP
         cachedDevice = data;
         if (!cachedDevice.BaseURL) {
-          cachedDevice.BaseURL = data.LocalIP ? `http://${data.LocalIP}` : `http://${host}`;
-        }
-        // Always prefer IP-based URL to avoid .local mDNS resolution issues
-        if (data.LocalIP) {
-          cachedDevice.BaseURL = `http://${data.LocalIP}`;
+          cachedDevice.BaseURL = `http://${host}`;
         }
         console.log(`[HDHR] Found: ${data.FriendlyName} (${data.DeviceID}) at ${cachedDevice.BaseURL}`);
         return cachedDevice;
@@ -55,13 +51,15 @@ async function discoverDevice(): Promise<any> {
     } catch { /* try next */ }
   }
 
-  // Try my.hdhomerun.com discovery
+  // Fallback: try cloud discovery API for IP
   try {
     const devices = await fetchJSON('https://ipv4-api.hdhomerun.com/discover');
     if (Array.isArray(devices) && devices.length > 0) {
       const dev = devices[0];
       cachedDevice = dev;
-      cachedDevice.BaseURL = dev.BaseURL || `http://${dev.LocalIP}`;
+      if (!cachedDevice.BaseURL) {
+        cachedDevice.BaseURL = dev.LocalIP ? `http://${dev.LocalIP}` : undefined;
+      }
       console.log(`[HDHR] Found via cloud: ${dev.FriendlyName} at ${cachedDevice.BaseURL}`);
       return cachedDevice;
     }
@@ -132,64 +130,68 @@ router.get('/guide', async (_req: Request, res: Response) => {
 });
 
 // GET /api/hdhr/stream/:channel
-// Proxies the MPEG-TS stream from the HDHomeRun to the browser.
-// Uses the URL directly from the lineup (already contains the full path).
+// Proxies the MPEG-TS stream from the HDHomeRun through ffmpeg for browser compatibility.
+// ATSC OTA can be MPEG-2+AC3 which browsers don't support. ffmpeg transcodes to H.264+AAC.
 router.get('/stream/:channel', async (req: Request, res: Response) => {
   const device = await discoverDevice();
   if (!device) return res.status(404).json({ error: 'No device' });
 
   const channel = req.params.channel;
 
-  // First try to find the channel's URL from the cached lineup
+  // Get stream URL from lineup
   let streamUrl = '';
   if (cachedLineup.length > 0) {
     const ch = cachedLineup.find((c: any) => c.GuideNumber === channel);
-    if (ch?.URL) {
-      streamUrl = ch.URL;
-    }
+    if (ch?.URL) streamUrl = ch.URL;
   }
+  if (!streamUrl) streamUrl = `${device.BaseURL}/auto/v${channel}`;
 
-  // Fallback: construct URL (try both formats)
-  if (!streamUrl) {
-    streamUrl = `${device.BaseURL}/auto/v${channel}`;
-  }
-
-  console.log(`[HDHR] Streaming: ${streamUrl}`);
+  console.log(`[HDHR] Streaming via ffmpeg: ${streamUrl}`);
 
   res.setHeader('Content-Type', 'video/mp2t');
   res.setHeader('Cache-Control', 'no-cache, no-store');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Transfer-Encoding', 'chunked');
 
-  const options = new URL(streamUrl);
-  const request = http.request({
-    hostname: options.hostname,
-    port: options.port || 80,
-    path: options.pathname + options.search,
-    method: 'GET',
-    headers: { 'Connection': 'keep-alive' },
-  }, (upstream) => {
-    console.log(`[HDHR] Stream response: ${upstream.statusCode} ${upstream.headers['content-type'] || 'no content-type'}`);
-    if (upstream.statusCode !== 200) {
-      let body = '';
-      upstream.on('data', (chunk) => { body += chunk.toString().slice(0, 200); });
-      upstream.on('end', () => { console.log(`[HDHR] Stream error body: ${body}`); res.status(upstream.statusCode || 500).end(); });
-      return;
+  // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
+  const isWin = process.platform === 'win32';
+  const ffmpegCmd = isWin ? 'ffmpeg.exe' : 'ffmpeg';
+
+  const ffmpeg = spawn(ffmpegCmd, [
+    '-i', streamUrl,
+    '-c:v', 'libx264',        // H.264 video (browser compatible)
+    '-preset', 'veryfast',     // low latency encoding
+    '-tune', 'zerolatency',    // minimize latency
+    '-c:a', 'aac',             // AAC audio (browser compatible)
+    '-b:a', '128k',
+    '-f', 'mpegts',            // output as MPEG-TS (mpegts.js can demux)
+    '-movflags', '+faststart',
+    'pipe:1',                  // output to stdout
+  ], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  ffmpeg.stdout?.pipe(res);
+
+  ffmpeg.stderr?.on('data', (data: Buffer) => {
+    const msg = data.toString().trim();
+    // Only log errors, not the constant progress output
+    if (msg.includes('Error') || msg.includes('error')) {
+      console.error(`[ffmpeg] ${msg.slice(0, 200)}`);
     }
-    upstream.pipe(res);
-    upstream.on('error', () => res.end());
-    upstream.on('end', () => { console.log('[HDHR] Stream ended'); res.end(); });
   });
 
-  request.on('error', (err) => {
-    console.error(`[HDHR] Stream error: ${err.message}`);
-    if (!res.headersSent) res.status(500).end();
+  ffmpeg.on('error', (err) => {
+    console.error(`[ffmpeg] Spawn error: ${err.message}`);
+    if (!res.headersSent) res.status(500).json({ error: 'ffmpeg not found. Install ffmpeg for TV streaming.' });
   });
 
-  request.end();
+  ffmpeg.on('close', (code) => {
+    console.log(`[ffmpeg] Exited (code ${code})`);
+    res.end();
+  });
 
   req.on('close', () => {
-    request.destroy();
+    ffmpeg.kill('SIGTERM');
   });
 });
 
