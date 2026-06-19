@@ -209,3 +209,12 @@ router.get('/radio', (_req: Request, res: Response) => {
 });
 
 export default router;
+
+// Pre-fetch guide data on server startup so first dashboard load is instant
+setTimeout(() => {
+  fetchGuideData().then((guide) => {
+    if (guide.length > 0) {
+      console.log(`[Recommendations] Pre-fetched guide: ${guide.length} channels`);
+    }
+  }).catch(() => {});
+}, 3000); // 3s delay to let HDHR discovery complete first
