@@ -80,19 +80,29 @@ export function useAudioStream() {
     // Two cascaded biquads at 14kHz give ~-40dB attenuation at 19kHz
     // (single biquad only gives ~-12dB which isn't enough)
     if (!filterRef.current || filterRef.current.context !== ctx) {
+      // De-emphasis filter: FM broadcast uses 75µs pre-emphasis (NA)
+      // This is a 6dB/oct rolloff above ~2122 Hz (1/(2π×75µs))
+      // Implemented as a highshelf at 2122 Hz with -10dB gain
+      const deemph = ctx.createBiquadFilter();
+      deemph.type = 'highshelf';
+      deemph.frequency.value = 2122;
+      deemph.gain.value = -10;
+
+      // Pilot tone removal: cascaded lowpass at 14kHz
       const filter1 = ctx.createBiquadFilter();
       filter1.type = 'lowpass';
       filter1.frequency.value = 14000;
-      filter1.Q.value = 0.54; // Bessel-like for minimal ringing
+      filter1.Q.value = 0.54;
 
       const filter2 = ctx.createBiquadFilter();
       filter2.type = 'lowpass';
       filter2.frequency.value = 14000;
-      filter2.Q.value = 1.31; // Second stage steeper rolloff
+      filter2.Q.value = 1.31;
 
+      deemph.connect(filter1);
       filter1.connect(filter2);
       filter2.connect(gainNodeRef.current);
-      filterRef.current = filter1;
+      filterRef.current = deemph;
     }
   }, []);
 

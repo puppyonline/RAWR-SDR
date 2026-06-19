@@ -100,18 +100,16 @@ app.post('/api/tune', async (req, res) => {
   switch (mode) {
     case 'fm':
       // Wideband FM broadcast
-      // -s 192k chosen because 192000 / 4 = 48000 (clean integer decimation)
-      // No -o flag (buggy on Windows, breaks -r resample)
-      // Pilot tone (19kHz) filtered client-side via BiquadFilter
+      // -s 192k divides cleanly to 48k output
+      // No -E deemp here — de-emphasis applied client-side for accuracy
+      // Fixed gain at 20 dB (AGC can overdrive strong stations causing distortion)
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '192k',
-        '-A', 'fast',
         '-r', '48000',
         '-l', '0',
-        '-E', 'deemp',
-        '-g', '0',             // AGC (auto gain)
+        '-g', '20',
       );
       break;
 
@@ -146,16 +144,14 @@ app.post('/api/tune', async (req, res) => {
       break;
 
     case 'hd':
-      // HD Radio - analog FM fallback (true HD needs nrsc5)
+      // HD Radio - analog FM fallback
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '192k',
-        '-A', 'fast',
         '-r', '48000',
         '-l', '0',
-        '-E', 'deemp',
-        '-g', '0',             // AGC
+        '-g', '20',
       );
       break;
 
