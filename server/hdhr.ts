@@ -40,10 +40,11 @@ async function discoverDevice(): Promise<any> {
     try {
       const data = await fetchJSON(`http://${host}/discover.json`);
       if (data && data.DeviceID) {
-        cachedDevice = { ...data, BaseURL: `http://${host.replace('.local', `.local`)}` };
-        // Use the actual LocalIP if available
-        if (data.LocalIP) cachedDevice.BaseURL = `http://${data.LocalIP}`;
-        else cachedDevice.BaseURL = `http://${host}`;
+        // Prefer the BaseURL from the device response, or use LocalIP
+        cachedDevice = data;
+        if (!cachedDevice.BaseURL) {
+          cachedDevice.BaseURL = data.LocalIP ? `http://${data.LocalIP}` : `http://${host}`;
+        }
         console.log(`[HDHR] Found: ${data.FriendlyName} (${data.DeviceID}) at ${cachedDevice.BaseURL}`);
         return cachedDevice;
       }
@@ -128,30 +129,41 @@ router.get('/guide', async (_req: Request, res: Response) => {
 
 // GET /api/hdhr/stream/:channel
 // Proxies the MPEG-TS stream from the HDHomeRun to the browser.
-// The Flex 4K can transcode to H.264 which browsers can play via mpegts.js
+// ATSC broadcasts are already H.264+AC3, which mpegts.js can demux.
 router.get('/stream/:channel', async (req: Request, res: Response) => {
   const device = await discoverDevice();
   if (!device) return res.status(404).json({ error: 'No device' });
 
   const channel = req.params.channel;
-  // transcode=mobile gives H.264+AAC which mpegts.js can handle
-  const streamUrl = `${device.BaseURL}/auto/v${channel}?transcode=mobile`;
+  const streamUrl = `${device.BaseURL}/auto/v${channel}`;
 
   console.log(`[HDHR] Streaming: ${streamUrl}`);
 
   res.setHeader('Content-Type', 'video/mp2t');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Transfer-Encoding', 'chunked');
 
-  const request = http.get(streamUrl, (upstream) => {
+  // Use a persistent connection to the HDHomeRun
+  const options = new URL(streamUrl);
+  const request = http.request({
+    hostname: options.hostname,
+    port: options.port || 80,
+    path: options.pathname + options.search,
+    method: 'GET',
+    headers: { 'Connection': 'keep-alive' },
+  }, (upstream) => {
     upstream.pipe(res);
     upstream.on('error', () => res.end());
+    upstream.on('end', () => res.end());
   });
 
   request.on('error', (err) => {
     console.error(`[HDHR] Stream error: ${err.message}`);
-    res.status(500).end();
+    if (!res.headersSent) res.status(500).end();
   });
+
+  request.end();
 
   // Clean up when client disconnects
   req.on('close', () => {
