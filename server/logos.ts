@@ -27,22 +27,59 @@ const tvLogos: Record<string, string> = {
   'ION': 'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/ion-television-us.png',
 };
 
+// ─── Station domain map for logo lookups (Google Favicons) ─────────────────
+// Maps callsigns to their website domains for high-quality favicon logos
+const stationDomains: Record<string, string> = {
+  // Phoenix FM
+  'KBAQ': 'kbaq.org',
+  'KJZZ': 'kjzz.org',
+  'KTAR': 'ktar.com',
+  'KDKB': 'alt933.com',
+  'KOOL': 'kfrq.com',
+  'KYOT': 'thecoyote955.com',
+  'KMXP': 'mix969.com',
+  'KUPD': '98kupd.com',
+  'KNRJ': 'energia987.com',
+  'KESZ': 'kesz.com',
+  'KSLX': 'kslx.com',
+  'KNIX': 'knix.com',
+  'KZON': 'thezonephx.com',
+  'KEDJ': 'theedge1039.com',
+  'KFYI': 'kfyi.com',
+  'KDVA': 'kdva.com',
+  'KMLE': 'kmle.com',
+  'KMVP': 'arizonasports.com',
+  // Phoenix AM
+  'KKNT': '960thepatriot.com',
+  'KFNN': 'kfnn.com',
+  'KGME': 'arizonasports.com',
+};
+
 /**
- * Lookup a radio station logo from radio-browser.info
+ * Get logo URL for a radio station.
+ * Priority: 1) Google Favicon from known domain, 2) radio-browser.info
  */
 async function lookupRadioLogo(callsign: string): Promise<string | null> {
   if (logoCache[callsign]) return logoCache[callsign];
 
+  // Try domain-based logo first (instant, no API call)
+  const domain = stationDomains[callsign.toUpperCase()];
+  if (domain) {
+    const logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+    logoCache[callsign] = logoUrl;
+    return logoUrl;
+  }
+
+  // Fallback: radio-browser.info lookup
   return new Promise((resolve) => {
     const url = `https://de1.api.radio-browser.info/json/stations/byname/${encodeURIComponent(callsign)}?limit=5`;
 
-    https.get(url, { headers: { 'User-Agent': 'RAWR-SDR/1.0' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'Airwave/2.0' } }, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
         try {
           const stations = JSON.parse(data);
-          // Find best match (has favicon and matches callsign)
           const match = stations.find((s: any) =>
             s.favicon && s.name.toUpperCase().includes(callsign.toUpperCase())
           ) || stations.find((s: any) => s.favicon);
