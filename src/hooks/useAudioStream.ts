@@ -41,7 +41,7 @@ export function useAudioStream() {
 
     while (bufferQueueRef.current.length > 0) {
       const samples = bufferQueueRef.current.shift()!;
-      const buffer = ctx.createBuffer(1, samples.length, 48000);
+      const buffer = ctx.createBuffer(1, samples.length, 32000);
       buffer.getChannelData(0).set(samples);
 
       const source = ctx.createBufferSource();
@@ -59,7 +59,8 @@ export function useAudioStream() {
 
   const ensureAudioContext = useCallback(async () => {
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
+      // All modes output 32kHz PCM (wbfm default, AM/ATC resampled via -r 32000)
+      audioCtxRef.current = new AudioContext({ sampleRate: 32000 });
     }
     if (audioCtxRef.current.state === 'suspended') {
       await audioCtxRef.current.resume();

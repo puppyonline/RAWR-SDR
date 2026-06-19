@@ -97,18 +97,13 @@ app.post('/api/tune', (req, res) => {
   switch (mode) {
     case 'fm':
       // Wideband FM broadcast
-      // -M wbfm is shorthand for: -M fm -s 170k -o 4 -A fast -r 32k -l 0 -E deemp
-      // We use explicit params for control over output rate
+      // -M wbfm: internally does -M fm -s 170k -o 4 -A fast -r 32k -l 0 -E deemp
+      // Outputs at 32kHz which naturally filters the 19kHz stereo pilot tone
+      // (pilot is above 16kHz Nyquist at 32k sample rate, so it's removed)
       args.push(
-        '-M', 'fm',
+        '-M', 'wbfm',
         '-f', `${frequency}M`,
-        '-s', '200k',          // 200 kHz sample rate (covers full FM channel)
-        '-o', '4',             // 4x oversampling for better quality
-        '-A', 'fast',          // fast atan math
-        '-r', '48000',         // resample output to 48kHz for WebAudio
-        '-l', '0',             // no squelch for broadcast
-        '-E', 'deemp',         // de-emphasis filter (removes pre-emphasis boost)
-        '-g', '40',            // tuner gain in dB
+        '-g', '40',
       );
       break;
 
@@ -120,7 +115,7 @@ app.post('/api/tune', (req, res) => {
         '-M', 'am',
         '-f', `${frequency}k`,  // frequency in kHz (e.g., "880k")
         '-s', '12k',            // 12 kHz sample rate (AM bandwidth is ~10 kHz)
-        '-r', '48000',          // resample to 48 kHz for WebAudio
+        '-r', '32000',          // resample to 32 kHz (matches FM output rate)
         '-l', '0',             // no squelch
         '-g', '50',            // higher gain for weak AM signals
         '-E', 'direct',        // CRITICAL: enable direct sampling for HF/MF
@@ -135,7 +130,7 @@ app.post('/api/tune', (req, res) => {
         '-M', 'am',
         '-f', `${frequency}M`,  // frequency in MHz
         '-s', '12k',            // 12 kHz sample rate (narrowband voice)
-        '-r', '48000',          // resample to 48 kHz for WebAudio
+        '-r', '32000',          // resample to 32 kHz (matches FM output rate)
         '-l', String(squelch || 50), // squelch level (0-9999, higher = more aggressive)
         '-g', '42',             // moderate gain
         '-p', '0',              // PPM correction (user should calibrate)
@@ -144,15 +139,10 @@ app.post('/api/tune', (req, res) => {
 
     case 'hd':
       // HD Radio - analog FM fallback (true HD needs nrsc5)
+      // Same as FM broadcast wideband
       args.push(
-        '-M', 'fm',
+        '-M', 'wbfm',
         '-f', `${frequency}M`,
-        '-s', '200k',
-        '-o', '4',
-        '-A', 'fast',
-        '-r', '48000',
-        '-l', '0',
-        '-E', 'deemp',
         '-g', '40',
       );
       break;
