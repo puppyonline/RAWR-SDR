@@ -33,11 +33,21 @@ export interface WikiSummary {
   url: string;
 }
 
+export interface AdvertiserInfo {
+  name: string;
+  description: string | null;
+  extract: string | null;
+  thumbnail: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
 export interface NowPlayingMeta {
   track: TrackInfo | null;
   artist: ArtistInfo | null;
   artistWiki: WikiSummary | null;
   stationWiki: WikiSummary | null;
+  advertiser: AdvertiserInfo | null;
 }
 
 export interface TVShowInfo {
@@ -115,6 +125,7 @@ export function useNowPlayingMeta(
           artist: data.artist || null,
           artistWiki: data.artistWiki || null,
           stationWiki: data.stationWiki || null,
+          advertiser: data.advertiser || null,
         };
         setClientCache(`np:${queryKey}`, result);
         setMeta(result);

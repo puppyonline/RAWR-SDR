@@ -592,7 +592,6 @@ router.get('/nowplaying', async (req: Request, res: Response) => {
   if (station) {
     promises.push(
       lookupWikipedia(`${station} (FM)`).then((info) => {
-        // If "(FM)" didn't work, try just the callsign
         if (!info) return lookupWikipedia(station).then((i) => { results.stationWiki = i; });
         results.stationWiki = info;
       })
@@ -600,7 +599,122 @@ router.get('/nowplaying', async (req: Request, res: Response) => {
   }
 
   await Promise.allSettled(promises);
+
+  // Fallback: if no track found, treat RDS text as possible ad/company
+  // Try to extract a brand name and look it up
+  if (!results.track && (artist || title)) {
+    const adInfo = await lookupAdvertiser(artist, title);
+    if (adInfo) {
+      results.advertiser = adInfo;
+    }
+  }
+
   res.json(results);
 });
+
+// ─── Advertiser/Company Detection from RDS Ad Text ─────────────────────────
+
+interface AdvertiserInfo {
+  name: string;
+  description: string | null;
+  extract: string | null;
+  thumbnail: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
+async function lookupAdvertiser(artist: string | undefined, title: string | undefined): Promise<AdvertiserInfo | null> {
+  // Combine available text
+  const rawText = [artist, title].filter(Boolean).join(' ');
+  if (!rawText || rawText.length < 3) return null;
+
+  const cacheKey = `ad:${rawText.toLowerCase().slice(0, 50)}`;
+  const cached = getCached(cacheKey);
+  if (cached !== null) return cached;
+
+  // Try to extract a brand/company name from RDS ad text
+  const brandName = extractBrandName(rawText);
+  if (!brandName) {
+    setCache(cacheKey, null, SHORT_CACHE);
+    return null;
+  }
+
+  try {
+    // Look up the brand on Wikipedia
+    const wiki = await lookupWikipedia(brandName);
+    if (!wiki) {
+      // Try with "company" disambiguation
+      const wikiCompany = await lookupWikipedia(`${brandName} (company)`);
+      if (!wikiCompany) {
+        setCache(cacheKey, null, SHORT_CACHE);
+        return null;
+      }
+      const result: AdvertiserInfo = {
+        name: wikiCompany.title,
+        description: wikiCompany.description,
+        extract: wikiCompany.extract,
+        thumbnail: wikiCompany.thumbnail,
+        url: wikiCompany.url,
+        logo: `https://logo.clearbit.com/${brandName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+      };
+      setCache(cacheKey, result);
+      return result;
+    }
+
+    const result: AdvertiserInfo = {
+      name: wiki.title,
+      description: wiki.description,
+      extract: wiki.extract,
+      thumbnail: wiki.thumbnail,
+      url: wiki.url,
+      logo: `https://logo.clearbit.com/${brandName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
+    };
+
+    setCache(cacheKey, result);
+    return result;
+  } catch {
+    setCache(cacheKey, null, SHORT_CACHE);
+    return null;
+  }
+}
+
+/**
+ * Extract a likely brand/company name from RDS ad text.
+ * RDS ads typically contain: brand names, phone numbers, URLs, slogans.
+ * We try to find the most "brand-like" token.
+ */
+function extractBrandName(text: string): string | null {
+  // Clean up: remove phone numbers, URLs, common ad words
+  let cleaned = text
+    .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '') // phone numbers
+    .replace(/\b\d{5}\b/g, '') // zip codes
+    .replace(/https?:\/\/\S+/gi, '') // URLs
+    .replace(/www\.\S+/gi, '') // www URLs
+    .replace(/\.(com|net|org|io)\b/gi, '') // domain TLDs
+    .replace(/\b(call|text|visit|now|today|free|save|off|sale|win|enter|at|the|and|or|for|your|our|get|with|from)\b/gi, '')
+    .replace(/[#@!$%&*()_+=\[\]{}|\\/<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleaned.length < 2) return null;
+
+  // Look for capitalized words (likely brand names)
+  const words = cleaned.split(' ').filter((w) => w.length >= 2);
+
+  // Try multi-word brand (first 2-3 capitalized consecutive words)
+  const capitalWords = words.filter((w) => /^[A-Z]/.test(w));
+  if (capitalWords.length >= 1) {
+    // Use the longest capitalized sequence
+    const brand = capitalWords.slice(0, 3).join(' ');
+    if (brand.length >= 3 && brand.length <= 30) return brand;
+  }
+
+  // Fallback: use the longest word that looks like a name
+  const candidates = words
+    .filter((w) => w.length >= 3 && /^[A-Z]/.test(w))
+    .sort((a, b) => b.length - a.length);
+
+  return candidates[0] || null;
+}
 
 export default router;

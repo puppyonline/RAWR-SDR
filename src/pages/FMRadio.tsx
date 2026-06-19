@@ -320,12 +320,48 @@ function NowPlayingPanel({ frequency, preset, rds, isPlaying }: {
       )}
 
       {/* Station Wikipedia blurb (when no track is playing) */}
-      {meta?.stationWiki && !hasTrack && (
+      {meta?.stationWiki && !hasTrack && !meta?.advertiser && (
         <div className="p-4 border-b border-white/[0.04]">
           <p className="text-2xs text-muted uppercase tracking-wide mb-1">About this station</p>
           <p className="text-xs text-muted line-clamp-3 leading-relaxed">
             {meta.stationWiki.extract}
           </p>
+        </div>
+      )}
+
+      {/* Advertiser info (shown when RDS text is an ad, not a song) */}
+      {meta?.advertiser && !meta?.track && hasTrack && (
+        <div className="p-4 border-b border-white/[0.04]">
+          <div className="flex items-start gap-3">
+            {meta.advertiser.thumbnail ? (
+              <img
+                src={meta.advertiser.thumbnail}
+                alt={meta.advertiser.name}
+                className="w-10 h-10 rounded-lg object-cover shrink-0"
+              />
+            ) : meta.advertiser.logo ? (
+              <img
+                src={meta.advertiser.logo}
+                alt={meta.advertiser.name}
+                className="w-10 h-10 rounded-lg object-contain shrink-0 bg-white/5 p-1"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-2xs text-faint uppercase tracking-wide">Sponsor</p>
+              </div>
+              <p className="text-xs font-semibold text-secondary mt-0.5">{meta.advertiser.name}</p>
+              {meta.advertiser.description && (
+                <p className="text-2xs text-faint mt-0.5">{meta.advertiser.description}</p>
+              )}
+              {meta.advertiser.extract && (
+                <p className="text-2xs text-muted mt-1 line-clamp-2 leading-relaxed">
+                  {meta.advertiser.extract}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
