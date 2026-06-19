@@ -181,19 +181,24 @@ router.get('/stream/:channel', async (req: Request, res: Response) => {
 
   // Transcode with ffmpeg: MPEG-2/AC-3 → H.264/AAC in MPEG-TS container
   const ffmpeg = spawn(ffmpegPath, [
+    '-fflags', 'nobuffer',       // don't buffer input
+    '-flags', 'low_delay',       // minimize delay
+    '-analyzeduration', '500000', // analyze only 0.5s of input (default is 5s)
+    '-probesize', '500000',      // probe only 500KB (default is 5MB)
     '-i', streamUrl,
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
+    '-preset', 'ultrafast',      // fastest encoding (less CPU, more bandwidth)
     '-tune', 'zerolatency',
-    '-profile:v', 'baseline',    // most compatible H.264 profile
+    '-profile:v', 'baseline',
     '-level', '3.1',
-    '-g', '30',                  // keyframe every 30 frames (1 sec at 30fps)
+    '-g', '30',
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-ar', '44100',              // standard audio sample rate
-    '-ac', '2',                  // stereo
+    '-ar', '44100',
+    '-ac', '2',
     '-f', 'mpegts',
-    '-mpegts_flags', 'resend_headers', // resend PAT/PMT periodically
+    '-mpegts_flags', 'resend_headers',
+    '-flush_packets', '1',       // flush output immediately
     'pipe:1',
   ], {
     stdio: ['pipe', 'pipe', 'pipe'],
