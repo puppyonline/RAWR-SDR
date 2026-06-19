@@ -106,12 +106,12 @@ app.post('/api/tune', async (req, res) => {
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
-        '-s', '192k',          // 192kHz capture (divides cleanly to 48k)
+        '-s', '192k',
         '-A', 'fast',
-        '-r', '48000',         // resample to 48kHz audio output
+        '-r', '48000',
         '-l', '0',
         '-E', 'deemp',
-        '-g', '40',
+        '-g', '0',             // AGC (auto gain)
       );
       break;
 
@@ -121,12 +121,12 @@ app.post('/api/tune', async (req, res) => {
       // AM broadcast is 530-1700 kHz, well within range
       args.push(
         '-M', 'am',
-        '-f', `${frequency}k`,  // frequency in kHz (e.g., "880k")
-        '-s', '12k',            // 12 kHz sample rate (AM bandwidth is ~10 kHz)
-        '-r', '48000',          // resample to 48 kHz for WebAudio
-        '-l', '0',             // no squelch
-        '-g', '50',            // higher gain for weak AM signals
-        '-E', 'direct',        // CRITICAL: enable direct sampling for HF/MF
+        '-f', `${frequency}k`,
+        '-s', '12k',
+        '-r', '48000',
+        '-l', '0',
+        '-g', '0',             // AGC
+        '-E', 'direct',
       );
       break;
 
@@ -136,12 +136,12 @@ app.post('/api/tune', async (req, res) => {
       // Aviation uses AM modulation with 25 kHz channel spacing
       args.push(
         '-M', 'am',
-        '-f', `${frequency}M`,  // frequency in MHz
-        '-s', '12k',            // 12 kHz sample rate (narrowband voice)
-        '-r', '48000',          // resample to 48 kHz for WebAudio
-        '-l', String(squelch || 50), // squelch level (0-9999, higher = more aggressive)
-        '-g', '42',             // moderate gain
-        '-p', '0',              // PPM correction (user should calibrate)
+        '-f', `${frequency}M`,
+        '-s', '12k',
+        '-r', '48000',
+        '-l', String(squelch || 50),
+        '-g', '0',             // AGC
+        '-p', '0',
       );
       break;
 
@@ -155,7 +155,7 @@ app.post('/api/tune', async (req, res) => {
         '-r', '48000',
         '-l', '0',
         '-E', 'deemp',
-        '-g', '40',
+        '-g', '0',             // AGC
       );
       break;
 
