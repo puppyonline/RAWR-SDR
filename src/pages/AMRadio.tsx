@@ -41,7 +41,7 @@ function AMRadio() {
     tuneTimer.current = setTimeout(() => {
       audio.tune(frequency, 'am');
       setSignalStrength(Math.floor(Math.random() * 30) + 40);
-    }, 350);
+    }, 600);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency]);
 

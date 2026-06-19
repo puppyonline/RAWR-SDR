@@ -82,12 +82,15 @@ app.get('/api/status', (_req, res) => {
  *   - rtl_fm can only demodulate analog; for true HD you'd need nrsc5
  *   - We tune as wideband FM for analog fallback
  */
-app.post('/api/tune', (req, res) => {
+app.post('/api/tune', async (req, res) => {
   const { frequency, mode, squelch } = req.body;
 
+  // Kill existing process and wait for USB device release
   if (activeProcess) {
     activeProcess.kill('SIGTERM');
     activeProcess = null;
+    // Windows needs time to release the USB device handle
+    await new Promise((resolve) => setTimeout(resolve, 800));
   }
 
   const isWin = process.platform === 'win32';
@@ -97,16 +100,15 @@ app.post('/api/tune', (req, res) => {
   switch (mode) {
     case 'fm':
       // Wideband FM broadcast
-      // Explicit params: capture at 200kHz, 4x oversample, demodulate,
-      // resample final audio to 48kHz. The 19kHz pilot tone is filtered
-      // client-side with a BiquadFilter lowpass at 16kHz.
+      // -s 192k chosen because 192000 / 4 = 48000 (clean integer decimation)
+      // No -o flag (buggy on Windows, breaks -r resample)
+      // Pilot tone (19kHz) filtered client-side via BiquadFilter
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
-        '-s', '200k',
-        '-o', '4',
+        '-s', '192k',          // 192kHz capture (divides cleanly to 48k)
         '-A', 'fast',
-        '-r', '48000',
+        '-r', '48000',         // resample to 48kHz audio output
         '-l', '0',
         '-E', 'deemp',
         '-g', '40',
@@ -148,8 +150,7 @@ app.post('/api/tune', (req, res) => {
       args.push(
         '-M', 'fm',
         '-f', `${frequency}M`,
-        '-s', '200k',
-        '-o', '4',
+        '-s', '192k',
         '-A', 'fast',
         '-r', '48000',
         '-l', '0',

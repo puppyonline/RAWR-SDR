@@ -36,7 +36,7 @@ function HDRadio() {
       audio.tune(frequency, 'hd');
       setSignalStrength(Math.floor(Math.random() * 30) + 45);
       setMetadata({ station: `HD${hdChannel} ${frequency.toFixed(1)}`, artist: 'Acquiring...', title: 'Decoding...', genre: 'HD Radio' });
-    }, 300);
+    }, 500);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency]);
 

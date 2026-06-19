@@ -46,7 +46,7 @@ function FMRadio() {
     tuneTimer.current = setTimeout(() => {
       audio.tune(frequency, 'fm');
       setSignalStrength(Math.floor(Math.random() * 30) + 55);
-    }, 250);
+    }, 500);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency]);
 

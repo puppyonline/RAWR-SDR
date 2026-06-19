@@ -46,7 +46,7 @@ function ATCRadio() {
     tuneTimer.current = setTimeout(() => {
       audio.tune(frequency, 'atc');
       setSignalStrength(Math.floor(Math.random() * 40) + 30);
-    }, 250);
+    }, 500);
     return () => { if (tuneTimer.current) clearTimeout(tuneTimer.current); };
   }, [frequency]);
 
