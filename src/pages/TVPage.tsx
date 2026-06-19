@@ -441,78 +441,86 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
       {/* ─── Custom Overlay (shows on hover/tap) ─────────────────────── */}
       {isPlaying && selectedChannel && (
         <div
-          className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-300 pointer-events-none ${
+          className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 pointer-events-none ${
             showOverlay ? 'opacity-100' : 'opacity-0'
           }`}
         >
-          {/* Top bar: channel info + show metadata */}
-          <div className="bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 pointer-events-auto">
-            <div className="flex items-start gap-3">
-              {/* Show poster */}
-              {showInfo?.image && (
-                <img
-                  src={showInfo.image}
-                  alt={showInfo.name}
-                  className="w-10 h-14 rounded object-cover shrink-0 shadow-lg hidden sm:block"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+          {/* Top-left: channel badge (minimal) */}
+          <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-5 pointer-events-auto">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
+              <span className="text-base font-semibold text-white drop-shadow-lg">{selectedChannel.GuideName}</span>
+              {network && (
+                <span className="text-xs text-white/70 bg-white/15 backdrop-blur-sm rounded-md px-2 py-0.5 font-medium">{network}</span>
               )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-tv">{selectedChannel.GuideNumber}</span>
-                  <span className="text-sm font-semibold text-white">{selectedChannel.GuideName}</span>
-                  {network && (
-                    <span className="badge bg-white/10 text-white/80 text-2xs border border-white/20">{network}</span>
-                  )}
-                </div>
-                {current && (
-                  <div className="mt-1">
-                    <p className="text-sm text-white/90 font-medium truncate">{current.Title}</p>
-                    {current.EpisodeTitle && (
-                      <p className="text-xs text-white/60 truncate">&ldquo;{current.EpisodeTitle}&rdquo;</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1">
-                      {showInfo?.rating && (
-                        <span className="flex items-center gap-0.5 text-2xs text-yellow-400">
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                          {showInfo.rating}
-                        </span>
-                      )}
-                      {showInfo?.genres.slice(0, 2).map((g) => (
-                        <span key={g} className="text-2xs text-white/50 bg-white/10 rounded px-1.5 py-0.5">{g}</span>
-                      ))}
-                      {current.Synopsis && (
-                        <span className="text-2xs text-white/40 truncate hidden md:inline">{current.Synopsis.slice(0, 80)}...</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
-          {/* Center: play/pause on click */}
-          <div className="flex-1" />
+          {/* Bottom: all show info + controls */}
+          <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent pt-16 pb-5 px-5 pointer-events-auto">
+            {/* Show info row */}
+            {current && (
+              <div className="flex items-end gap-4 mb-4">
+                {/* Show poster */}
+                {showInfo?.image && (
+                  <img
+                    src={showInfo.image}
+                    alt={showInfo.name}
+                    className="w-16 h-24 rounded-lg object-cover shrink-0 shadow-2xl hidden sm:block ring-1 ring-white/10"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
 
-          {/* Bottom bar: progress + controls */}
-          <div className="bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 pointer-events-auto">
-            {/* Cast row */}
-            {showInfo?.cast && showInfo.cast.length > 0 && (
-              <div className="flex items-center gap-2 mb-2.5 hidden sm:flex">
-                {showInfo.cast.slice(0, 5).map((c) => (
-                  <div key={c.name} className="flex items-center gap-1">
-                    {c.image && <img src={c.image} alt={c.name} className="w-5 h-5 rounded-full object-cover" />}
-                    <span className="text-2xs text-white/50">{c.name}</span>
+                <div className="min-w-0 flex-1">
+                  {/* Title */}
+                  <h3 className="text-lg font-bold text-white drop-shadow-lg leading-tight">{current.Title}</h3>
+                  {current.EpisodeTitle && (
+                    <p className="text-sm text-white/70 mt-0.5 drop-shadow">&ldquo;{current.EpisodeTitle}&rdquo;</p>
+                  )}
+
+                  {/* Metadata badges */}
+                  <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+                    {showInfo?.rating && (
+                      <span className="flex items-center gap-1 text-sm text-yellow-400 font-medium">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        {showInfo.rating}
+                      </span>
+                    )}
+                    {showInfo?.genres.slice(0, 3).map((g) => (
+                      <span key={g} className="text-xs text-white/70 bg-white/10 backdrop-blur-sm rounded-md px-2 py-0.5">{g}</span>
+                    ))}
+                    {timeRemaining > 0 && (
+                      <span className="text-xs text-white/50 font-mono">{timeRemaining} min left</span>
+                    )}
                   </div>
-                ))}
+
+                  {/* Synopsis */}
+                  {(current.Synopsis || showInfo?.summary) && (
+                    <p className="text-sm text-white/60 mt-2 line-clamp-2 leading-relaxed max-w-2xl hidden sm:block">
+                      {current.Synopsis || showInfo?.summary}
+                    </p>
+                  )}
+
+                  {/* Cast */}
+                  {showInfo?.cast && showInfo.cast.length > 0 && (
+                    <div className="flex items-center gap-3 mt-2.5 hidden md:flex">
+                      {showInfo.cast.slice(0, 4).map((c) => (
+                        <div key={c.name} className="flex items-center gap-1.5">
+                          {c.image && <img src={c.image} alt={c.name} className="w-6 h-6 rounded-full object-cover ring-1 ring-white/20" />}
+                          <span className="text-xs text-white/60">{c.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Progress bar */}
             {current && (
-              <div className="h-1 bg-white/20 rounded-full overflow-hidden mb-3 cursor-pointer">
+              <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mb-4 cursor-pointer group">
                 <div
-                  className="h-full bg-tv rounded-full transition-all duration-1000"
+                  className="h-full bg-tv rounded-full transition-all duration-1000 group-hover:bg-tv/90"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -520,10 +528,10 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
 
             {/* Controls row */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 {/* Play/Pause */}
-                <button onClick={togglePlayPause} className="text-white/80 hover:text-white transition-colors">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <button onClick={togglePlayPause} className="text-white/90 hover:text-white transition-colors hover:scale-110 active:scale-95">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
                     {videoRef.current?.paused
                       ? <path d="M8 5v14l11-7z"/>
                       : <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>
@@ -531,27 +539,27 @@ function VideoPlayerWithOverlay({ videoRef, isPlaying, isBuffering, selectedChan
                   </svg>
                 </button>
                 {/* Stop */}
-                <button onClick={onStop} className="text-white/60 hover:text-red-400 transition-colors">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                <button onClick={onStop} className="text-white/60 hover:text-red-400 transition-colors hover:scale-110 active:scale-95">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                 </button>
-                {/* Time */}
+                {/* Time display */}
                 {current && (
-                  <span className="text-xs text-white/60 font-mono">
+                  <span className="text-sm text-white/60 font-mono ml-1">
                     {formatTime(current.StartTime)} &ndash; {formatTime(current.EndTime)}
-                    <span className="text-white/40 ml-2">{timeRemaining}m left</span>
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                {/* Up next badge */}
+
+              <div className="flex items-center gap-4">
+                {/* Up next */}
                 {next && (
-                  <span className="text-2xs text-white/40 hidden sm:inline">
-                    Next: {next.Title} at {formatTime(next.StartTime)}
+                  <span className="text-sm text-white/50 hidden sm:inline">
+                    Next: <span className="text-white/70">{next.Title}</span>
                   </span>
                 )}
                 {/* Fullscreen */}
-                <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors hover:scale-110 active:scale-95">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     {isFullscreen ? (
                       <><path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/></>
                     ) : (
