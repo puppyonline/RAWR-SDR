@@ -3,6 +3,44 @@ import SpectrumVisualizer from '../components/SpectrumVisualizer';
 import SignalMeter from '../components/SignalMeter';
 import { useAudioStream } from '../hooks/useAudioStream';
 
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+interface WeatherData {
+  location: string;
+  current: {
+    temperature: number | null;
+    feelsLike: number | null;
+    humidity: number | null;
+    windSpeed: number | null;
+    windDirection: string | null;
+    description: string;
+    icon: string | null;
+    station: string;
+    timestamp: string | null;
+  };
+  forecast: Array<{
+    name: string;
+    temperature: number;
+    unit: string;
+    shortForecast: string;
+    detailedForecast: string;
+    isDaytime: boolean;
+    windSpeed: string;
+    windDirection: string;
+  }>;
+  alerts: Array<{
+    event: string;
+    severity: string;
+    urgency: string;
+    headline: string;
+    description: string;
+    instruction: string | null;
+    areas: string;
+    onset: string | null;
+    expires: string | null;
+  }>;
+}
+
 // NOAA Weather Radio frequencies for Phoenix/Mesa area
 // NWR broadcasts on 7 frequencies nationwide. Phoenix uses these:
 const stations = [
@@ -19,9 +57,28 @@ function WeatherRadio() {
   const [frequency, setFrequency] = useState(162.550);
   const [volume, setVolume] = useState(80);
   const [power, setPower] = useState(false);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
   const audio = useAudioStream();
   const tuneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialTune = useRef(false);
+
+  // Fetch weather data
+  useEffect(() => {
+    fetch('/api/weather')
+      .then((r) => r.ok ? r.json() : null)
+      .then(setWeather)
+      .catch(() => {});
+
+    // Refresh every 5 min
+    const interval = setInterval(() => {
+      fetch('/api/weather')
+        .then((r) => r.ok ? r.json() : null)
+        .then(setWeather)
+        .catch(() => {});
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => { audio.setVolume(volume); }, [volume, audio.setVolume]);
 
@@ -127,6 +184,104 @@ function WeatherRadio() {
         </div>
       </div>
 
+      {/* Weather Dashboard */}
+      {weather && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {/* Current conditions */}
+          <div className="card p-5">
+            <span className="label">Current Conditions</span>
+            <div className="mt-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-4xl font-bold text-primary font-mono">
+                    {weather.current.temperature !== null ? `${weather.current.temperature}°` : '--°'}
+                  </p>
+                  <p className="text-sm text-secondary mt-1">{weather.current.description}</p>
+                  {weather.current.feelsLike !== null && weather.current.feelsLike !== weather.current.temperature && (
+                    <p className="text-xs text-muted mt-0.5">Feels like {weather.current.feelsLike}°F</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted">{weather.location}</p>
+                  <p className="text-2xs text-faint mt-0.5">Stn: {weather.current.station}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-t-[var(--color-border)]">
+                <div>
+                  <p className="text-2xs text-faint">Humidity</p>
+                  <p className="text-sm font-medium text-secondary">{weather.current.humidity ?? '--'}%</p>
+                </div>
+                <div>
+                  <p className="text-2xs text-faint">Wind</p>
+                  <p className="text-sm font-medium text-secondary">
+                    {weather.current.windSpeed ?? '--'} mph
+                    {weather.current.windDirection && <span className="text-faint"> {weather.current.windDirection}</span>}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-2xs text-faint">Updated</p>
+                  <p className="text-sm font-medium text-secondary">
+                    {weather.current.timestamp ? new Date(weather.current.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Forecast */}
+          <div className="lg:col-span-2 card p-5">
+            <span className="label">Forecast</span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2 mt-3">
+              {weather.forecast.map((period, i) => (
+                <div key={i} className="card-inner p-2.5 text-center">
+                  <p className="text-2xs text-muted truncate">{period.name}</p>
+                  <p className="text-lg font-bold text-primary mt-1">{period.temperature}°</p>
+                  <p className="text-2xs text-faint mt-1 line-clamp-2">{period.shortForecast}</p>
+                  <p className="text-2xs text-faint mt-0.5">{period.windSpeed} {period.windDirection}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active alerts */}
+      {weather && weather.alerts.length > 0 && (
+        <div className="space-y-2">
+          {weather.alerts.map((alert, i) => (
+            <div key={i} className={`card p-4 border-l-4 ${
+              alert.severity === 'Extreme' ? 'border-l-danger bg-danger/5' :
+              alert.severity === 'Severe' ? 'border-l-warn bg-warn/5' :
+              'border-l-brand bg-brand/5'
+            }`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-bold text-primary">{alert.event}</p>
+                  <p className="text-xs text-secondary mt-0.5">{alert.headline}</p>
+                </div>
+                <span className={`badge text-2xs ${
+                  alert.severity === 'Extreme' ? 'bg-danger/10 text-danger border border-danger/20' :
+                  alert.severity === 'Severe' ? 'bg-warn/10 text-warn border border-warn/20' :
+                  'badge-brand'
+                }`}>{alert.severity}</span>
+              </div>
+              {alert.description && (
+                <p className="text-xs text-muted mt-2 line-clamp-3 leading-relaxed">{alert.description}</p>
+              )}
+              {alert.instruction && (
+                <p className="text-xs text-secondary mt-2 font-medium">{alert.instruction.slice(0, 200)}</p>
+              )}
+              <div className="flex items-center gap-3 mt-2">
+                <span className="text-2xs text-faint">{alert.areas}</span>
+                {alert.expires && (
+                  <span className="text-2xs text-faint">Expires: {new Date(alert.expires).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Station list */}
       <div className="card p-4">
         <span className="label">NOAA Weather Stations &mdash; Arizona</span>
@@ -152,15 +307,6 @@ function WeatherRadio() {
         </div>
       </div>
 
-      {/* About */}
-      <div className="card p-4">
-        <span className="label">About NOAA Weather Radio</span>
-        <p className="text-sm text-muted mt-2 leading-relaxed">
-          NOAA Weather Radio All Hazards (NWR) broadcasts continuous weather information directly from National Weather Service offices.
-          It provides forecasts, current conditions, watches, warnings, and emergency alerts 24/7.
-          The Phoenix transmitter (WXL-58 on 162.550 MHz) covers the entire Mesa/Phoenix metro area.
-        </p>
-      </div>
     </div>
   );
 }

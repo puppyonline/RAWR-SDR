@@ -8,6 +8,7 @@ import logosRouter from './logos';
 import newsRouter from './news';
 import recommendationsRouter from './recommendations';
 import metadataRouter from './metadata';
+import weatherRouter from './weather';
 
 const app = express();
 const PORT = 3001;
@@ -77,6 +78,9 @@ app.use('/api/recommendations', recommendationsRouter);
 
 // Metadata enrichment (TVmaze, iTunes, Wikipedia, MusicBrainz, etc.)
 app.use('/api/metadata', metadataRouter);
+
+// NWS Weather data (current conditions, forecast, alerts)
+app.use('/api/weather', weatherRouter);
 
 /**
  * Hybrid tuning approach:
