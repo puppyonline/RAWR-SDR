@@ -18,33 +18,13 @@ import { Router, Request, Response } from 'express';
 import http from 'http';
 import https from 'https';
 import { spawn, execSync } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
 
-// Find ffmpeg binary: try ffmpeg-static package first, then system PATH
-let ffmpegPath = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-try {
-  // Look for ffmpeg-static in node_modules
-  const staticPath = path.resolve('node_modules', 'ffmpeg-static', 'ffmpeg.exe');
-  const staticPathUnix = path.resolve('node_modules', 'ffmpeg-static', 'ffmpeg');
-  const candidate = process.platform === 'win32' ? staticPath : staticPathUnix;
-  if (fs.existsSync(candidate)) {
-    ffmpegPath = candidate;
-  } else {
-    // Try requiring it (handles different install locations)
-    const resolved = path.resolve('node_modules', 'ffmpeg-static', 'index.js');
-    if (fs.existsSync(resolved)) {
-      // Read the package to find the binary path
-      const pkg = JSON.parse(fs.readFileSync(path.resolve('node_modules', 'ffmpeg-static', 'package.json'), 'utf-8'));
-      const binDir = path.resolve('node_modules', 'ffmpeg-static');
-      const files = fs.readdirSync(binDir);
-      const bin = files.find(f => f === 'ffmpeg' || f === 'ffmpeg.exe');
-      if (bin) ffmpegPath = path.join(binDir, bin);
-    }
-  }
-} catch { /* use system ffmpeg */ }
-console.log(`[HDHR] ffmpeg path: ${ffmpegPath}`);
+// Use system ffmpeg from PATH.
+// For full ATSC 3.0 support (AC-4 audio), install from https://www.gyan.dev/ffmpeg/builds/
+// Get the "full" build which includes more codecs.
+// The npm "ffmpeg-static" package ships ffmpeg 6.0 which lacks AC-4 (Dolby proprietary).
+const ffmpegPath = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+console.log(`[HDHR] Using system ffmpeg: ${ffmpegPath}`);
 
 const router = Router();
 
