@@ -499,9 +499,13 @@ function ChannelInfoPanel({ channel, guide, channelMeta }: {
   const upcoming = entries.filter((e) => e.StartTime > now).slice(0, 5);
   const network = channelMeta[channel.GuideNumber.split('.')[0]]?.network;
 
+  // Strip common suffixes to get the base callsign for Wikipedia lookup
+  // e.g., "KTVK-HD" -> "KTVK", "KSAZ-DT" -> "KSAZ"
+  const baseCallsign = channel.GuideName.replace(/[- ]?(HD|DT|SD|TV|LP|\d+)$/i, '').trim();
+
   // Fetch rich data
   const showInfo = useTVShowInfo(current?.Title);
-  const stationWiki = useWikiSummary(channel.GuideName, 'tv_station');
+  const stationWiki = useWikiSummary(baseCallsign, 'tv_station');
   const networkWiki = useWikiSummary(network && network !== 'IND' ? `${network} (TV network)` : undefined, 'tv_station');
 
   const formatTime = (epoch: number) =>

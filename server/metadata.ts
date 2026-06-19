@@ -310,10 +310,11 @@ async function lookupWikipedia(query: string, context?: 'tv_station' | 'artist' 
   const titlesToTry: string[] = [];
   if (context === 'tv_station') {
     // Try specific TV-related disambiguations first
+    titlesToTry.push(query); // Direct callsign (e.g., "KTVK" — most stations have pages by callsign)
+    titlesToTry.push(`${query}-TV`); // e.g., "KSAZ-TV"
     titlesToTry.push(`${query} (TV channel)`);
     titlesToTry.push(`${query} (TV network)`);
     titlesToTry.push(`${query} (American TV channel)`);
-    titlesToTry.push(query); // fallback to exact name
   } else {
     titlesToTry.push(query);
   }
