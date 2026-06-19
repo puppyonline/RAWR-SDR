@@ -238,7 +238,7 @@ function TVPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* Video Player */}
         <div className="lg:col-span-2 card p-0 overflow-hidden flex flex-col">
           <div className="relative aspect-video bg-black flex items-center justify-center">
@@ -291,11 +291,11 @@ function TVPage() {
         </div>
 
         {/* Channel List */}
-        <div className="card p-0 overflow-y-auto">
-          <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-bg-card z-10">
+        <div className="card p-0 overflow-hidden flex flex-col lg:self-stretch max-h-[28rem] lg:max-h-none">
+          <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-bg-card z-10 shrink-0">
             <span className="label">Channels ({channels.length})</span>
           </div>
-          <div className="divide-y divide-white/[0.04]">
+          <div className="divide-y divide-white/[0.04] overflow-y-auto flex-1 min-h-0">
             {channels.map((ch) => {
               const program = getCurrentProgram(ch.GuideNumber);
               const meta = channelMeta[ch.GuideNumber.split('.')[0]];
