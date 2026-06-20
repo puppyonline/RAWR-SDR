@@ -464,9 +464,6 @@ app.post('/api/tune', async (req, res) => {
 
         wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
       });
-
-        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
-      });
     }
 
     activeProcess.on('error', (err) => {
