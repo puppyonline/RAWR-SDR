@@ -47,7 +47,10 @@ const aircraftMap = new Map<string, Aircraft>();
 
 // ─── Mode S Decoder ────────────────────────────────────────────────────────
 
-const CHARSET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ##### ###############0123456789######';
+// ICAO Annex 10 Vol IV, 6-bit character set for Mode S callsigns
+// Index 0 = space, 1-26 = A-Z, 27-47 = reserved (space),
+// 48-57 = 0-9, 58-63 = reserved (space)
+const CHARSET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ                     0123456789      ';
 
 function createAircraft(hex: string): Aircraft {
   return {
