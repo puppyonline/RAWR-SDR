@@ -8,9 +8,13 @@ interface Aircraft {
   altitude: number | null;
   speed: number | null;
   heading: number | null;
+  verticalRate: number | null;
   squawk: string;
   seen: number;
   messages: number;
+  rssi: number | null;
+  category: string;
+  emergency: string;
 }
 
 function ADSBTracker() {
@@ -64,7 +68,7 @@ function ADSBTracker() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">ADS-B Tracker</h2>
-            <p className="text-xs text-muted font-mono mt-0.5">1090 MHz &middot; R820T Dongle &middot; Mode-S</p>
+            <p className="text-xs text-muted font-mono mt-0.5">1090 MHz &middot; dump1090 &middot; R820T Dongle</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -139,9 +143,14 @@ function ADSBTracker() {
               <InfoRow label="Altitude" value={selected.altitude ? `${selected.altitude.toLocaleString()} ft` : '—'} />
               <InfoRow label="Speed" value={selected.speed ? `${selected.speed} kts` : '—'} />
               <InfoRow label="Heading" value={selected.heading ? `${selected.heading}\u00B0` : '—'} />
+              <InfoRow label="Vert Rate" value={selected.verticalRate ? `${selected.verticalRate > 0 ? '+' : ''}${selected.verticalRate} ft/m` : '—'} />
               <InfoRow label="Squawk" value={selected.squawk || '—'} />
+              <InfoRow label="Position" value={selected.lat && selected.lon ? `${selected.lat.toFixed(4)}, ${selected.lon.toFixed(4)}` : '—'} />
+              <InfoRow label="RSSI" value={selected.rssi ? `${selected.rssi.toFixed(1)} dBFS` : '—'} />
               <InfoRow label="Messages" value={String(selected.messages)} />
               <InfoRow label="Last Seen" value={`${selected.seen}s ago`} />
+              {selected.category && <InfoRow label="Category" value={selected.category} />}
+              {selected.emergency && selected.emergency !== 'none' && <InfoRow label="Emergency" value={selected.emergency} />}
             </div>
           ) : (
             <p className="text-sm text-muted">Click an aircraft in the table.</p>
