@@ -401,7 +401,7 @@ app.post('/api/tune', async (req, res) => {
         '-M', 'am',
         '-f', `${frequency}k`,
         '-s', '48k',
-        '-E', 'direct',
+        '-E', 'direct2',
         '-E', 'dc',
       ];
 
