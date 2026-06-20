@@ -5,7 +5,6 @@ import ThemePicker from './ThemePicker';
 const navLinks = [
   { path: '/', label: 'Home' },
   { path: '/fm', label: 'FM' },
-  { path: '/am', label: 'AM' },
   { path: '/hd', label: 'HD Radio' },
   { path: '/tv', label: 'Live TV' },
   { path: '/guide', label: 'TV Guide' },

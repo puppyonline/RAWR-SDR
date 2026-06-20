@@ -175,7 +175,6 @@ function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <QuickCard to="/fm" label="FM Radio" count="26 stations" accent="radio" icon={<WaveIcon />} />
           <QuickCard to="/hd" label="HD Radio" count="27 channels" accent="radio" icon={<HDIcon />} />
-          <QuickCard to="/am" label="AM Radio" count="20 stations" accent="radio" icon={<AMIcon />} />
           <QuickCard to="/tv" label="Live TV" count="HDHR Flex 4K" accent="tv" icon={<TVIcon />} />
           <QuickCard to="/weather" label="Weather" count="NOAA NWR" accent="aviation" icon={<WeatherIcon />} />
           <QuickCard to="/atc" label="ATC Scanner" count="PHX &middot; IWA" accent="aviation" icon={<PlaneIcon />} />
@@ -229,7 +228,6 @@ function Dashboard() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Stat label="FM" value="26" />
-            <Stat label="AM" value="20" />
             <Stat label="HD" value="27" />
             <Stat label="TV" value={recs?.tv.nowAiring.length?.toString() || '—'} />
             <Stat label="ATC" value="25" />
