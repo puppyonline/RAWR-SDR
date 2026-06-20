@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface Aircraft {
   hex: string;
@@ -10,11 +10,9 @@ interface Aircraft {
   heading: number | null;
   verticalRate: number | null;
   squawk: string;
+  category: string;
   seen: number;
   messages: number;
-  rssi: number | null;
-  category: string;
-  emergency: string;
 }
 
 interface AircraftInfo {
@@ -27,11 +25,27 @@ interface AircraftInfo {
   airlineIcao: string | null;
   airlineLogo: string | null;
   airframeUrl: string | null;
-  aircraftUrl: string | null;
   photo: string | null;
   photoLink: string | null;
   photographer: string | null;
-  photos: Array<{ src: string; link: string; photographer: string }>;
+}
+
+interface TracePoint {
+  ts: number;
+  lat: number;
+  lon: number;
+  alt: number;
+  speed: number | null;
+  heading: number | null;
+}
+
+interface TraceData {
+  hex: string;
+  registration: string | null;
+  type: string | null;
+  description: string | null;
+  operator: string | null;
+  trace: TracePoint[];
 }
 
 function ADSBTracker() {
@@ -39,17 +53,21 @@ function ADSBTracker() {
   const [isTracking, setIsTracking] = useState(false);
   const [selected, setSelected] = useState<Aircraft | null>(null);
   const [acInfo, setAcInfo] = useState<AircraftInfo | null>(null);
+  const [trace, setTrace] = useState<TraceData | null>(null);
   const [infoLoading, setInfoLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMap = useRef<any>(null);
+  const markersRef = useRef<any>(null);
+  const traceLayerRef = useRef<any>(null);
   const infoCacheRef = useRef<Map<string, AircraftInfo>>(new Map());
 
-  // Poll for aircraft data when tracking
+  // Poll for aircraft data
   useEffect(() => {
     if (!isTracking) {
       if (pollRef.current) clearInterval(pollRef.current);
       return;
     }
-
     const poll = () => {
       fetch('/api/adsb/aircraft')
         .then((r) => r.ok ? r.json() : null)
@@ -61,55 +79,131 @@ function ADSBTracker() {
         })
         .catch(() => {});
     };
-
     poll();
-    pollRef.current = setInterval(poll, 1000);
+    pollRef.current = setInterval(poll, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [isTracking]);
 
-  const startTracking = async () => {
-    try {
-      await fetch('/api/adsb/start', { method: 'POST' });
-      setIsTracking(true);
-    } catch {}
-  };
-
-  // Fetch aircraft info when selection changes
+  // Initialize Leaflet map
   useEffect(() => {
-    if (!selected) { setAcInfo(null); return; }
+    if (!mapRef.current || leafletMap.current) return;
+    import('leaflet').then((L) => {
+      const map = L.map(mapRef.current!, { zoomControl: true }).setView([33.4152, -111.8315], 9);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 18,
+      }).addTo(map);
+      leafletMap.current = map;
+      markersRef.current = L.layerGroup().addTo(map);
+      traceLayerRef.current = L.layerGroup().addTo(map);
+    });
+    return () => {
+      if (leafletMap.current) { leafletMap.current.remove(); leafletMap.current = null; }
+    };
+  }, []);
 
-    // Check local cache first
-    const cached = infoCacheRef.current.get(selected.hex);
-    if (cached) { setAcInfo(cached); return; }
+  // Update markers when aircraft data changes
+  useEffect(() => {
+    if (!leafletMap.current || !markersRef.current) return;
+    import('leaflet').then((L) => {
+      markersRef.current.clearLayers();
+      const withPos = aircraft.filter((ac) => ac.lat !== null && ac.lon !== null);
+      for (const ac of withPos) {
+        const isSelected = selected?.hex === ac.hex;
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="transform:rotate(${ac.heading || 0}deg);font-size:${isSelected ? '22px' : '16px'};filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5))">${isSelected ? '✈️' : '🛩️'}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
+        const marker = L.marker([ac.lat!, ac.lon!], { icon })
+          .bindTooltip(`${ac.flight || ac.hex}<br>${ac.altitude ? ac.altitude.toLocaleString() + ' ft' : 'ground'}`, { direction: 'top', offset: [0, -10] });
+        marker.on('click', () => setSelected(ac));
+        markersRef.current.addLayer(marker);
+      }
+    });
+  }, [aircraft, selected?.hex]);
 
-    setInfoLoading(true);
-    fetch(`/api/adsb/info/${selected.hex.toLowerCase()}`)
+  // Fetch info + trace when selection changes
+  useEffect(() => {
+    if (!selected) { setAcInfo(null); setTrace(null); return; }
+
+    // Info
+    const cachedInfo = infoCacheRef.current.get(selected.hex);
+    if (cachedInfo) { setAcInfo(cachedInfo); }
+    else {
+      setInfoLoading(true);
+      fetch(`/api/adsb/info/${selected.hex}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data) { infoCacheRef.current.set(selected.hex, data); setAcInfo(data); } })
+        .catch(() => {})
+        .finally(() => setInfoLoading(false));
+    }
+
+    // Trace (flight path)
+    fetch(`/api/adsb/trace/${selected.hex}`)
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data) {
-          infoCacheRef.current.set(selected.hex, data);
-          setAcInfo(data);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setInfoLoading(false));
+      .then((data) => { if (data) setTrace(data); })
+      .catch(() => {});
   }, [selected?.hex]);
 
+  // Draw flight path on map when trace changes
+  useEffect(() => {
+    if (!leafletMap.current || !traceLayerRef.current) return;
+    import('leaflet').then((L) => {
+      traceLayerRef.current.clearLayers();
+      if (!trace?.trace?.length) return;
+
+      const points: [number, number][] = trace.trace.map((t) => [t.lat, t.lon]);
+      if (points.length < 2) return;
+
+      // Flight path polyline
+      const polyline = L.polyline(points, {
+        color: '#10b981',
+        weight: 2.5,
+        opacity: 0.8,
+        dashArray: '6 4',
+      });
+      traceLayerRef.current.addLayer(polyline);
+
+      // Start/end markers
+      const startIcon = L.divIcon({ className: '', html: '<div style="font-size:12px">🟢</div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+      const endIcon = L.divIcon({ className: '', html: '<div style="font-size:14px">📍</div>', iconSize: [16, 16], iconAnchor: [8, 14] });
+      traceLayerRef.current.addLayer(L.marker(points[0], { icon: startIcon }));
+      traceLayerRef.current.addLayer(L.marker(points[points.length - 1], { icon: endIcon }));
+
+      // Fit map to trace bounds
+      leafletMap.current.fitBounds(polyline.getBounds().pad(0.1));
+    });
+  }, [trace]);
+
+  const startTracking = async () => {
+    try { await fetch('/api/adsb/start', { method: 'POST' }); setIsTracking(true); } catch {}
+  };
+
   const stopTracking = async () => {
-    try {
-      await fetch('/api/adsb/stop', { method: 'POST' });
-    } catch {}
+    try { await fetch('/api/adsb/stop', { method: 'POST' }); } catch {}
     setIsTracking(false);
     setAircraft([]);
+    setSelected(null);
   };
+
+  const selectAircraft = useCallback((ac: Aircraft) => {
+    setSelected(ac);
+    // Pan map to aircraft if it has position
+    if (ac.lat && ac.lon && leafletMap.current) {
+      leafletMap.current.setView([ac.lat, ac.lon], 10, { animate: true });
+    }
+  }, []);
 
   return (
     <div className="space-y-3">
+      {/* Header */}
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">ADS-B Tracker</h2>
-            <p className="text-xs text-muted font-mono mt-0.5">1090 MHz &middot; dump1090 &middot; R820T Dongle</p>
+            <p className="text-xs text-muted font-mono mt-0.5">1090 MHz &middot; R820T &middot; planespotters.live enrichment</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -126,9 +220,14 @@ function ADSBTracker() {
         </div>
       </div>
 
+      {/* Map */}
+      <div className="card p-0 overflow-hidden rounded-lg" style={{ height: '400px' }}>
+        <div ref={mapRef} className="w-full h-full" />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Aircraft list (replaces radar for now — no lat/lon from rtl_adsb) */}
-        <div className="lg:col-span-2 card p-0 max-h-[500px] overflow-y-auto">
+        {/* Aircraft list */}
+        <div className="lg:col-span-2 card p-0 max-h-[400px] overflow-y-auto">
           <div className="sticky top-0 p-3 border-b border-white/[0.06] bg-[var(--color-card)] z-10">
             <span className="label">{isTracking ? 'Live Aircraft' : 'Start tracking to see aircraft'}</span>
           </div>
@@ -142,7 +241,6 @@ function ADSBTracker() {
                   <th className="text-right py-2 px-3 font-medium">Spd</th>
                   <th className="text-right py-2 px-3 font-medium">Hdg</th>
                   <th className="text-right py-2 px-3 font-medium">Sqwk</th>
-                  <th className="text-right py-2 px-3 font-medium">Msgs</th>
                   <th className="text-right py-2 px-3 font-medium">Seen</th>
                 </tr>
               </thead>
@@ -150,18 +248,17 @@ function ADSBTracker() {
                 {aircraft.map((ac) => (
                   <tr
                     key={ac.hex}
-                    onClick={() => setSelected(ac)}
+                    onClick={() => selectAircraft(ac)}
                     className={`cursor-pointer transition-colors border-b border-white/[0.03] hover:bg-white/[0.02] ${
                       selected?.hex === ac.hex ? 'bg-emerald-500/5' : ''
                     }`}
                   >
                     <td className="py-2 px-3 font-mono font-medium text-secondary">{ac.flight || '—'}</td>
                     <td className="py-2 px-3 font-mono text-muted text-xs">{ac.hex}</td>
-                    <td className="py-2 px-3 text-right font-mono">{ac.altitude ? ac.altitude.toLocaleString() : '—'}</td>
+                    <td className="py-2 px-3 text-right font-mono">{ac.altitude !== null ? (ac.altitude === 0 ? 'GND' : ac.altitude.toLocaleString()) : '—'}</td>
                     <td className="py-2 px-3 text-right font-mono">{ac.speed ?? '—'}</td>
-                    <td className="py-2 px-3 text-right font-mono">{ac.heading ? `${ac.heading}\u00B0` : '—'}</td>
+                    <td className="py-2 px-3 text-right font-mono">{ac.heading ? `${ac.heading}°` : '—'}</td>
                     <td className="py-2 px-3 text-right font-mono text-muted">{ac.squawk || '—'}</td>
-                    <td className="py-2 px-3 text-right font-mono text-faint">{ac.messages}</td>
                     <td className="py-2 px-3 text-right text-muted">{ac.seen}s</td>
                   </tr>
                 ))}
@@ -175,108 +272,62 @@ function ADSBTracker() {
         </div>
 
         {/* Detail panel */}
-        <div className="card p-5">
+        <div className="card p-5 max-h-[400px] overflow-y-auto">
           <span className="label mb-3 block">{selected ? 'Aircraft Detail' : 'Select Aircraft'}</span>
           {selected ? (
             <div className="space-y-3">
-              {/* Photo from PlaneSpotters.net */}
+              {/* Photo */}
               {acInfo?.photo && (
                 <a href={acInfo.photoLink || '#'} target="_blank" rel="noopener noreferrer" className="block">
-                  <img
-                    src={acInfo.photo}
-                    alt={acInfo.registration || selected.hex}
-                    className="w-full rounded-lg border border-white/[0.06] mb-2"
-                  />
-                  {acInfo.photographer && (
-                    <p className="text-2xs text-faint text-right">© {acInfo.photographer} via PlaneSpotters.net</p>
-                  )}
+                  <img src={acInfo.photo} alt={acInfo.registration || selected.hex} className="w-full rounded-lg border border-white/[0.06] mb-1" />
+                  {acInfo.photographer && <p className="text-2xs text-faint text-right">© {acInfo.photographer}</p>}
                 </a>
               )}
-              {infoLoading && <p className="text-xs text-muted animate-pulse">Loading aircraft info...</p>}
+              {infoLoading && <p className="text-xs text-muted animate-pulse">Loading...</p>}
 
               {/* Airline branding */}
               {acInfo?.airlineLogo && acInfo?.owner && (
                 <div className="flex items-center gap-2 card-inner p-2">
                   <img src={acInfo.airlineLogo} alt={acInfo.owner} className="h-5 w-auto" />
                   <span className="text-xs font-medium text-secondary">{acInfo.owner}</span>
-                  {acInfo.airlineIata && <span className="text-2xs text-faint ml-auto">{acInfo.airlineIata} / {acInfo.airlineIcao}</span>}
                 </div>
               )}
 
-              {/* Aircraft identity */}
-              <InfoRow label="Callsign" value={selected.flight || 'Unknown'} highlight />
-              {acInfo?.registration && <InfoRow label="Registration" value={acInfo.registration} />}
-              <InfoRow label="ICAO Hex" value={selected.hex} />
-              {!acInfo?.airlineLogo && acInfo?.owner && <InfoRow label="Operator" value={acInfo.owner} />}
-              {acInfo?.type && <InfoRow label="Aircraft" value={acInfo.type} />}
-              {acInfo?.icaoType && <InfoRow label="Type Code" value={acInfo.icaoType} />}
+              {/* Identity */}
+              <InfoRow label="Callsign" value={selected.flight || '—'} highlight />
+              {acInfo?.registration && <InfoRow label="Reg" value={acInfo.registration} />}
+              <InfoRow label="Hex" value={selected.hex} />
+              {acInfo?.type && <InfoRow label="Type" value={acInfo.type} />}
 
               {/* Telemetry */}
               <div className="pt-2 border-t border-white/[0.04]">
-                <InfoRow label="Altitude" value={selected.altitude ? `${selected.altitude.toLocaleString()} ft` : '—'} />
+                <InfoRow label="Alt" value={selected.altitude !== null ? (selected.altitude === 0 ? 'Ground' : `${selected.altitude.toLocaleString()} ft`) : '—'} />
                 <InfoRow label="Speed" value={selected.speed ? `${selected.speed} kts` : '—'} />
-                <InfoRow label="Heading" value={selected.heading ? `${selected.heading}\u00B0` : '—'} />
-                <InfoRow label="Vert Rate" value={selected.verticalRate ? `${selected.verticalRate > 0 ? '+' : ''}${selected.verticalRate} ft/m` : '—'} />
+                <InfoRow label="Heading" value={selected.heading ? `${selected.heading}°` : '—'} />
+                <InfoRow label="V/S" value={selected.verticalRate ? `${selected.verticalRate > 0 ? '+' : ''}${selected.verticalRate} ft/m` : '—'} />
                 <InfoRow label="Squawk" value={selected.squawk || '—'} />
                 <InfoRow label="Position" value={selected.lat && selected.lon ? `${selected.lat.toFixed(4)}, ${selected.lon.toFixed(4)}` : '—'} />
-                <InfoRow label="Messages" value={String(selected.messages)} />
-                <InfoRow label="Last Seen" value={`${selected.seen}s ago`} />
               </div>
 
-              {/* External links */}
+              {/* Trace info */}
+              {trace && trace.trace.length > 0 && (
+                <div className="pt-2 border-t border-white/[0.04]">
+                  <InfoRow label="Track Points" value={String(trace.trace.length)} />
+                  {trace.operator && <InfoRow label="Operator" value={trace.operator} />}
+                  {trace.description && <InfoRow label="Aircraft" value={trace.description} />}
+                </div>
+              )}
+
+              {/* Links */}
               <div className="pt-2 border-t border-white/[0.04] flex flex-wrap gap-2">
-                <a
-                  href={`https://radar.planespotters.net/?icao=${selected.hex.toLowerCase()}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-brand-bright hover:underline"
-                >
-                  Live Radar ↗
-                </a>
-                {acInfo?.airframeUrl && (
-                  <a
-                    href={acInfo.airframeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-brand-bright hover:underline"
-                  >
-                    Airframe ↗
-                  </a>
-                )}
-                <a
-                  href={`https://globe.adsbexchange.com/?icao=${selected.hex.toLowerCase()}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-brand-bright hover:underline"
-                >
-                  ADSBExchange ↗
-                </a>
-                {acInfo?.registration && (
-                  <a
-                    href={`https://www.flightradar24.com/data/aircraft/${acInfo.registration.toLowerCase()}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-brand-bright hover:underline"
-                  >
-                    FlightRadar24 ↗
-                  </a>
-                )}
+                <a href={`https://radar.planespotters.net/?icao=${selected.hex}`} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-bright hover:underline">Live Radar ↗</a>
+                <a href={`https://globe.adsbexchange.com/?icao=${selected.hex}`} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-bright hover:underline">ADSBx ↗</a>
+                {acInfo?.registration && <a href={`https://www.flightradar24.com/data/aircraft/${acInfo.registration.toLowerCase()}`} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-bright hover:underline">FR24 ↗</a>}
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">Click an aircraft in the table.</p>
+            <p className="text-sm text-muted">Click an aircraft in the table or on the map.</p>
           )}
-
-          {/* Info card */}
-          <div className="mt-4 pt-4 border-t border-white/[0.04]">
-            <span className="label mb-2 block">Receiver Info</span>
-            <div className="space-y-1.5">
-              <InfoRow label="Dongle" value="NESDR Mini (R820T)" />
-              <InfoRow label="Frequency" value="1090 MHz" />
-              <InfoRow label="Device" value="#0" />
-              <InfoRow label="Status" value={isTracking ? 'Active' : 'Idle'} />
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -285,7 +336,7 @@ function ADSBTracker() {
 
 function InfoRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-white/[0.04] last:border-0">
+    <div className="flex justify-between items-center py-1 border-b border-white/[0.04] last:border-0">
       <span className="text-xs text-muted">{label}</span>
       <span className={`font-mono text-sm ${highlight ? 'text-emerald-400 font-semibold' : 'text-secondary'}`}>{value}</span>
     </div>
