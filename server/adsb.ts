@@ -87,7 +87,22 @@ function fetchJSON(url: string): Promise<any> {
   });
 }
 
-// ─── Local Decoder (hex extraction only) ───────────────────────────────────
+// ─── Local Decoder (hex extraction + CRC validation) ───────────────────────
+
+/**
+ * CRC-24 for Mode S. Polynomial: 0x1FFF409.
+ * Returns the 24-bit remainder after processing all bytes.
+ */
+function crc24(bytes: number[], len: number): number {
+  let crc = 0;
+  for (let i = 0; i < len; i++) {
+    crc ^= (bytes[i] << 16);
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x800000) ? ((crc << 1) ^ 0x1FFF409) & 0xFFFFFF : (crc << 1) & 0xFFFFFF;
+    }
+  }
+  return crc;
+}
 
 function decodeMessage(line: string) {
   const trimmed = line.trim();
@@ -95,11 +110,52 @@ function decodeMessage(line: string) {
   const hex = trimmed.slice(1, -1);
   if (hex.length < 14) return;
 
-  // Extract ICAO address from bytes 1-3
-  const b1 = parseInt(hex.slice(2, 4), 16);
-  const b2 = parseInt(hex.slice(4, 6), 16);
-  const b3 = parseInt(hex.slice(6, 8), 16);
-  const icao = ((b1 << 16) | (b2 << 8) | b3).toString(16).toLowerCase().padStart(6, '0');
+  const bytes: number[] = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes.push(parseInt(hex.slice(i, i + 2), 16));
+  }
+
+  const df = (bytes[0] >> 3) & 0x1F;
+
+  let icao: string;
+
+  if (hex.length === 28 && (df === 17 || df === 18)) {
+    // DF17/18 Extended Squitter: PI field is pure CRC.
+    // CRC over all 14 bytes must be 0 for valid message.
+    if (crc24(bytes, 14) !== 0) return;
+    icao = ((bytes[1] << 16) | (bytes[2] << 8) | bytes[3]).toString(16).toLowerCase().padStart(6, '0');
+
+  } else if (hex.length === 28) {
+    // Other long messages (DF20/21): PI = CRC XOR ICAO.
+    // CRC over first 11 bytes gives us what PI should be if ICAO is in bytes 1-3.
+    const computed = crc24(bytes, 11);
+    const pi = (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+    icao = (computed ^ pi).toString(16).toLowerCase().padStart(6, '0');
+    // Validate: the derived ICAO should match bytes 1-3 for DF20/21
+    const headerIcao = ((bytes[1] << 16) | (bytes[2] << 8) | bytes[3]).toString(16).toLowerCase().padStart(6, '0');
+    // For DF20/21 the header doesn't contain ICAO directly, so accept if
+    // the derived ICAO is already tracked (confirms it's a real aircraft)
+    if (!aircraftMap.has(icao) && icao !== headerIcao) return;
+
+  } else if (hex.length === 14) {
+    // Short messages (56 bits / 7 bytes): DF4/5/11
+    // For DF11: PI = CRC XOR ICAO (ICAO is in bytes 1-3)
+    // For DF4/5: address is derived from PI XOR CRC
+    if (df === 11) {
+      // DF11 All-Call: CRC over first 4 bytes, PI in bytes 4-6
+      const computed = crc24(bytes, 4);
+      const pi = (bytes[4] << 16) | (bytes[5] << 8) | bytes[6];
+      icao = (computed ^ pi).toString(16).toLowerCase().padStart(6, '0');
+    } else {
+      // DF4/5: Only accept if the ICAO derived from CRC is already tracked
+      const computed = crc24(bytes, 4);
+      const pi = (bytes[4] << 16) | (bytes[5] << 8) | bytes[6];
+      icao = (computed ^ pi).toString(16).toLowerCase().padStart(6, '0');
+      if (!aircraftMap.has(icao)) return; // Only accept for known aircraft
+    }
+  } else {
+    return;
+  }
 
   if (!icao || icao === '000000') return;
 
