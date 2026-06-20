@@ -406,7 +406,7 @@ router.get('/aircraft', (_req: Request, res: Response) => {
   });
 });
 
-// ─── Aircraft Info Lookup (hexdb.io + PlaneSpotters.net) ───────────────────
+// ─── Aircraft Info Lookup (planespotters.live) ─────────────────────────────
 
 const ADSB_USER_AGENT = 'Airwave/2.0 (local media hub; https://github.com/puppyonline/RAWR-SDR)';
 
@@ -415,15 +415,19 @@ interface AircraftInfo {
   registration: string | null;
   type: string | null;
   icaoType: string | null;
-  manufacturer: string | null;
   owner: string | null;
-  operatorCode: string | null;
+  airlineIata: string | null;
+  airlineIcao: string | null;
+  airlineLogo: string | null;
+  airframeUrl: string | null;
+  aircraftUrl: string | null;
   photo: string | null;
   photoLink: string | null;
   photographer: string | null;
+  photos: Array<{ src: string; link: string; photographer: string }>;
 }
 
-// In-memory cache for aircraft lookups (they don't change often)
+// In-memory cache (aircraft details don't change mid-flight)
 const infoCache = new Map<string, { data: AircraftInfo; ts: number }>();
 const INFO_CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -453,37 +457,44 @@ async function lookupAircraft(hex: string): Promise<AircraftInfo> {
     registration: null,
     type: null,
     icaoType: null,
-    manufacturer: null,
     owner: null,
-    operatorCode: null,
+    airlineIata: null,
+    airlineIcao: null,
+    airlineLogo: null,
+    airframeUrl: null,
+    aircraftUrl: null,
     photo: null,
     photoLink: null,
     photographer: null,
+    photos: [],
   };
 
-  // Fetch aircraft details from hexdb.io (free, no key)
+  // planespotters.live: aircraft details + photos in one call
   try {
-    const details = await fetchJSONFromUrl(`https://hexdb.io/api/v1/aircraft/${hex}`);
-    if (details) {
-      info.registration = details.Registration || null;
-      info.type = details.Type || null;
-      info.icaoType = details.ICAOTypeCode || null;
-      info.manufacturer = details.Manufacturer || null;
-      info.owner = details.RegisteredOwners || null;
-      info.operatorCode = details.OperatorFlagCode || null;
+    const data = await fetchJSONFromUrl(`https://planespotters.live/api/aircraft/hex/${hex}`);
+    const ac = data?.aircraft;
+    if (ac) {
+      info.registration = ac.reg || null;
+      info.type = ac.aircraft_name || null;
+      info.icaoType = ac.aircraft_code || null;
+      info.owner = ac.airline_name || ac.ownOp || null;
+      info.airlineIata = ac.airline_iata || null;
+      info.airlineIcao = ac.airline_icao || null;
+      info.airlineLogo = ac.airline_logo || null;
+      info.airframeUrl = ac.url || null;
+      info.aircraftUrl = ac.aircraft_url || null;
     }
-  } catch { /* hexdb unavailable */ }
-
-  // Fetch photo from PlaneSpotters.net (free, needs User-Agent)
-  try {
-    const photos = await fetchJSONFromUrl(`https://api.planespotters.net/pub/photos/hex/${hex}`);
-    if (photos?.photos?.length > 0) {
-      const photo = photos.photos[0];
-      info.photo = photo.thumbnail_large?.src || photo.thumbnail?.src || null;
-      info.photoLink = photo.link || null;
-      info.photographer = photo.photographer || null;
+    if (data?.photos?.length > 0) {
+      info.photos = data.photos.map((p: any) => ({
+        src: p.thumbnail_large?.src || p.thumbnail?.src || '',
+        link: p.link || '',
+        photographer: p.photographer || '',
+      }));
+      info.photo = info.photos[0].src || null;
+      info.photoLink = info.photos[0].link || null;
+      info.photographer = info.photos[0].photographer || null;
     }
-  } catch { /* planespotters unavailable */ }
+  } catch { /* planespotters.live unavailable */ }
 
   infoCache.set(hex, { data: info, ts: Date.now() });
   return info;
@@ -491,8 +502,8 @@ async function lookupAircraft(hex: string): Promise<AircraftInfo> {
 
 // GET /api/adsb/info/:hex — lookup aircraft details + photo by ICAO hex
 router.get('/info/:hex', async (req: Request, res: Response) => {
-  const hex = req.params.hex.toUpperCase();
-  if (!/^[0-9A-F]{6}$/.test(hex)) {
+  const hex = req.params.hex.toLowerCase();
+  if (!/^[0-9a-f]{6}$/.test(hex)) {
     return res.status(400).json({ error: 'Invalid hex code' });
   }
 

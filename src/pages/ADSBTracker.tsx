@@ -22,12 +22,16 @@ interface AircraftInfo {
   registration: string | null;
   type: string | null;
   icaoType: string | null;
-  manufacturer: string | null;
   owner: string | null;
-  operatorCode: string | null;
+  airlineIata: string | null;
+  airlineIcao: string | null;
+  airlineLogo: string | null;
+  airframeUrl: string | null;
+  aircraftUrl: string | null;
   photo: string | null;
   photoLink: string | null;
   photographer: string | null;
+  photos: Array<{ src: string; link: string; photographer: string }>;
 }
 
 function ADSBTracker() {
@@ -79,7 +83,7 @@ function ADSBTracker() {
     if (cached) { setAcInfo(cached); return; }
 
     setInfoLoading(true);
-    fetch(`/api/adsb/info/${selected.hex}`)
+    fetch(`/api/adsb/info/${selected.hex.toLowerCase()}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) {
@@ -190,13 +194,21 @@ function ADSBTracker() {
               )}
               {infoLoading && <p className="text-xs text-muted animate-pulse">Loading aircraft info...</p>}
 
+              {/* Airline branding */}
+              {acInfo?.airlineLogo && acInfo?.owner && (
+                <div className="flex items-center gap-2 card-inner p-2">
+                  <img src={acInfo.airlineLogo} alt={acInfo.owner} className="h-5 w-auto" />
+                  <span className="text-xs font-medium text-secondary">{acInfo.owner}</span>
+                  {acInfo.airlineIata && <span className="text-2xs text-faint ml-auto">{acInfo.airlineIata} / {acInfo.airlineIcao}</span>}
+                </div>
+              )}
+
               {/* Aircraft identity */}
               <InfoRow label="Callsign" value={selected.flight || 'Unknown'} highlight />
               {acInfo?.registration && <InfoRow label="Registration" value={acInfo.registration} />}
               <InfoRow label="ICAO Hex" value={selected.hex} />
-              {acInfo?.owner && <InfoRow label="Operator" value={acInfo.owner} />}
+              {!acInfo?.airlineLogo && acInfo?.owner && <InfoRow label="Operator" value={acInfo.owner} />}
               {acInfo?.type && <InfoRow label="Aircraft" value={acInfo.type} />}
-              {acInfo?.manufacturer && <InfoRow label="Manufacturer" value={acInfo.manufacturer} />}
               {acInfo?.icaoType && <InfoRow label="Type Code" value={acInfo.icaoType} />}
 
               {/* Telemetry */}
@@ -214,13 +226,23 @@ function ADSBTracker() {
               {/* External links */}
               <div className="pt-2 border-t border-white/[0.04] flex flex-wrap gap-2">
                 <a
-                  href={`https://www.planespotters.net/hex/${selected.hex}`}
+                  href={`https://radar.planespotters.net/?icao=${selected.hex.toLowerCase()}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-brand-bright hover:underline"
                 >
-                  PlaneSpotters ↗
+                  Live Radar ↗
                 </a>
+                {acInfo?.airframeUrl && (
+                  <a
+                    href={acInfo.airframeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-brand-bright hover:underline"
+                  >
+                    Airframe ↗
+                  </a>
+                )}
                 <a
                   href={`https://globe.adsbexchange.com/?icao=${selected.hex.toLowerCase()}`}
                   target="_blank"
