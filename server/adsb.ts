@@ -355,6 +355,7 @@ router.post('/start', (_req: Request, res: Response) => {
   });
 
   console.log('[ADS-B] Started (R820T, device 0, 1090 MHz, gain 42)');
+  startEnrichment();
   res.json({ status: 'started' });
 });
 
@@ -363,10 +364,102 @@ router.post('/stop', (_req: Request, res: Response) => {
     adsbProcess.kill('SIGTERM');
     adsbProcess = null;
     aircraftMap.clear();
+    stopEnrichment();
     console.log('[ADS-B] Stopped');
   }
   res.json({ status: 'stopped' });
 });
+
+// ─── Live enrichment from planespotters.live/api/radar/trace ───────────────
+// Fetches live position/flight/squawk for tracked aircraft to fill gaps
+// from weak local reception. Runs periodically while tracking is active.
+
+const ADSB_USER_AGENT = 'Airwave/2.0 (local media hub; https://github.com/puppyonline/RAWR-SDR)';
+
+function fetchJSONFromUrl(url: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    https.get(url, { timeout: 8000, headers: { 'User-Agent': ADSB_USER_AGENT } }, (res) => {
+      if (res.statusCode && res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error('Invalid JSON')); }
+      });
+    }).on('error', reject);
+  });
+}
+
+// Track which hexes we've already enriched recently (avoid hammering API)
+const enrichCache = new Map<string, number>();
+const ENRICH_COOLDOWN_MS = 30 * 1000; // Don't re-fetch same hex within 30s
+
+async function enrichAircraft(ac: Aircraft): Promise<void> {
+  const lastEnrich = enrichCache.get(ac.hex);
+  if (lastEnrich && (Date.now() - lastEnrich) < ENRICH_COOLDOWN_MS) return;
+  enrichCache.set(ac.hex, Date.now());
+
+  try {
+    const data = await fetchJSONFromUrl(
+      `https://planespotters.live/api/radar/trace/${ac.hex.toLowerCase()}`
+    );
+    if (!data?.trace?.length) return;
+
+    // Get the latest trace entry
+    const latest = data.trace[data.trace.length - 1];
+    // Trace format: [timestamp, lat, lon, alt, speed, heading, ?, vert_rate, extended_or_null, ...]
+    if (latest.length >= 8) {
+      const [_ts, lat, lon, alt, speed, heading, , vertRate, extended] = latest;
+
+      // Fill missing position
+      if (ac.lat === null && typeof lat === 'number') ac.lat = Math.round(lat * 10000) / 10000;
+      if (ac.lon === null && typeof lon === 'number') ac.lon = Math.round(lon * 10000) / 10000;
+
+      // Fill missing telemetry (only if we don't have local data)
+      if (ac.altitude === null && alt !== null && alt !== 'ground') ac.altitude = typeof alt === 'number' ? alt : null;
+      if (ac.speed === null && typeof speed === 'number') ac.speed = Math.round(speed);
+      if (ac.heading === null && typeof heading === 'number') ac.heading = Math.round(heading);
+      if (ac.verticalRate === null && typeof vertRate === 'number') ac.verticalRate = vertRate;
+
+      // Extended data has callsign, squawk
+      if (extended && typeof extended === 'object') {
+        if (!ac.flight && extended.flight) ac.flight = extended.flight.trim();
+        if (!ac.squawk && extended.squawk) ac.squawk = extended.squawk;
+        if (!ac.category && extended.category) ac.category = extended.category;
+      }
+    }
+
+    // Top-level has registration and type
+    if (!ac.flight && data.r) ac.flight = data.r; // Use reg as fallback display
+  } catch { /* API unavailable, use local data */ }
+}
+
+// Background enrichment loop: enriches aircraft that are missing data
+let enrichInterval: ReturnType<typeof setInterval> | null = null;
+
+function startEnrichment() {
+  if (enrichInterval) return;
+  enrichInterval = setInterval(async () => {
+    if (!adsbProcess) { stopEnrichment(); return; }
+
+    // Enrich aircraft missing key data (flight, position, altitude)
+    const toEnrich = Array.from(aircraftMap.values())
+      .filter((ac) => !ac.flight || ac.lat === null || ac.altitude === null)
+      .slice(0, 5); // Max 5 per cycle to avoid rate limits
+
+    for (const ac of toEnrich) {
+      await enrichAircraft(ac);
+    }
+  }, 5000); // Every 5 seconds
+}
+
+function stopEnrichment() {
+  if (enrichInterval) { clearInterval(enrichInterval); enrichInterval = null; }
+  enrichCache.clear();
+}
 
 router.get('/aircraft', (_req: Request, res: Response) => {
   // Update seen times and clean stale
@@ -402,10 +495,6 @@ router.get('/aircraft', (_req: Request, res: Response) => {
   });
 });
 
-// ─── Aircraft Info Lookup (planespotters.live) ─────────────────────────────
-
-const ADSB_USER_AGENT = 'Airwave/2.0 (local media hub; https://github.com/puppyonline/RAWR-SDR)';
-
 interface AircraftInfo {
   hex: string;
   registration: string | null;
@@ -426,23 +515,6 @@ interface AircraftInfo {
 // In-memory cache (aircraft details don't change mid-flight)
 const infoCache = new Map<string, { data: AircraftInfo; ts: number }>();
 const INFO_CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function fetchJSONFromUrl(url: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    https.get(url, { timeout: 8000, headers: { 'User-Agent': ADSB_USER_AGENT } }, (res) => {
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { reject(new Error('Invalid JSON')); }
-      });
-    }).on('error', reject);
-  });
-}
 
 async function lookupAircraft(hex: string): Promise<AircraftInfo> {
   const cached = infoCache.get(hex);
