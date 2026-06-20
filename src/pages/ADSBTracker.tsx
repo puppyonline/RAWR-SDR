@@ -17,11 +17,27 @@ interface Aircraft {
   emergency: string;
 }
 
+interface AircraftInfo {
+  hex: string;
+  registration: string | null;
+  type: string | null;
+  icaoType: string | null;
+  manufacturer: string | null;
+  owner: string | null;
+  operatorCode: string | null;
+  photo: string | null;
+  photoLink: string | null;
+  photographer: string | null;
+}
+
 function ADSBTracker() {
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
   const [isTracking, setIsTracking] = useState(false);
   const [selected, setSelected] = useState<Aircraft | null>(null);
+  const [acInfo, setAcInfo] = useState<AircraftInfo | null>(null);
+  const [infoLoading, setInfoLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const infoCacheRef = useRef<Map<string, AircraftInfo>>(new Map());
 
   // Poll for aircraft data when tracking
   useEffect(() => {
@@ -53,6 +69,27 @@ function ADSBTracker() {
       setIsTracking(true);
     } catch {}
   };
+
+  // Fetch aircraft info when selection changes
+  useEffect(() => {
+    if (!selected) { setAcInfo(null); return; }
+
+    // Check local cache first
+    const cached = infoCacheRef.current.get(selected.hex);
+    if (cached) { setAcInfo(cached); return; }
+
+    setInfoLoading(true);
+    fetch(`/api/adsb/info/${selected.hex}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) {
+          infoCacheRef.current.set(selected.hex, data);
+          setAcInfo(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setInfoLoading(false));
+  }, [selected?.hex]);
 
   const stopTracking = async () => {
     try {
@@ -138,19 +175,71 @@ function ADSBTracker() {
           <span className="label mb-3 block">{selected ? 'Aircraft Detail' : 'Select Aircraft'}</span>
           {selected ? (
             <div className="space-y-3">
+              {/* Photo from PlaneSpotters.net */}
+              {acInfo?.photo && (
+                <a href={acInfo.photoLink || '#'} target="_blank" rel="noopener noreferrer" className="block">
+                  <img
+                    src={acInfo.photo}
+                    alt={acInfo.registration || selected.hex}
+                    className="w-full rounded-lg border border-white/[0.06] mb-2"
+                  />
+                  {acInfo.photographer && (
+                    <p className="text-2xs text-faint text-right">© {acInfo.photographer} via PlaneSpotters.net</p>
+                  )}
+                </a>
+              )}
+              {infoLoading && <p className="text-xs text-muted animate-pulse">Loading aircraft info...</p>}
+
+              {/* Aircraft identity */}
               <InfoRow label="Callsign" value={selected.flight || 'Unknown'} highlight />
+              {acInfo?.registration && <InfoRow label="Registration" value={acInfo.registration} />}
               <InfoRow label="ICAO Hex" value={selected.hex} />
-              <InfoRow label="Altitude" value={selected.altitude ? `${selected.altitude.toLocaleString()} ft` : '—'} />
-              <InfoRow label="Speed" value={selected.speed ? `${selected.speed} kts` : '—'} />
-              <InfoRow label="Heading" value={selected.heading ? `${selected.heading}\u00B0` : '—'} />
-              <InfoRow label="Vert Rate" value={selected.verticalRate ? `${selected.verticalRate > 0 ? '+' : ''}${selected.verticalRate} ft/m` : '—'} />
-              <InfoRow label="Squawk" value={selected.squawk || '—'} />
-              <InfoRow label="Position" value={selected.lat && selected.lon ? `${selected.lat.toFixed(4)}, ${selected.lon.toFixed(4)}` : '—'} />
-              <InfoRow label="RSSI" value={selected.rssi ? `${selected.rssi.toFixed(1)} dBFS` : '—'} />
-              <InfoRow label="Messages" value={String(selected.messages)} />
-              <InfoRow label="Last Seen" value={`${selected.seen}s ago`} />
-              {selected.category && <InfoRow label="Category" value={selected.category} />}
-              {selected.emergency && selected.emergency !== 'none' && <InfoRow label="Emergency" value={selected.emergency} />}
+              {acInfo?.owner && <InfoRow label="Operator" value={acInfo.owner} />}
+              {acInfo?.type && <InfoRow label="Aircraft" value={acInfo.type} />}
+              {acInfo?.manufacturer && <InfoRow label="Manufacturer" value={acInfo.manufacturer} />}
+              {acInfo?.icaoType && <InfoRow label="Type Code" value={acInfo.icaoType} />}
+
+              {/* Telemetry */}
+              <div className="pt-2 border-t border-white/[0.04]">
+                <InfoRow label="Altitude" value={selected.altitude ? `${selected.altitude.toLocaleString()} ft` : '—'} />
+                <InfoRow label="Speed" value={selected.speed ? `${selected.speed} kts` : '—'} />
+                <InfoRow label="Heading" value={selected.heading ? `${selected.heading}\u00B0` : '—'} />
+                <InfoRow label="Vert Rate" value={selected.verticalRate ? `${selected.verticalRate > 0 ? '+' : ''}${selected.verticalRate} ft/m` : '—'} />
+                <InfoRow label="Squawk" value={selected.squawk || '—'} />
+                <InfoRow label="Position" value={selected.lat && selected.lon ? `${selected.lat.toFixed(4)}, ${selected.lon.toFixed(4)}` : '—'} />
+                <InfoRow label="Messages" value={String(selected.messages)} />
+                <InfoRow label="Last Seen" value={`${selected.seen}s ago`} />
+              </div>
+
+              {/* External links */}
+              <div className="pt-2 border-t border-white/[0.04] flex flex-wrap gap-2">
+                <a
+                  href={`https://www.planespotters.net/hex/${selected.hex}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand-bright hover:underline"
+                >
+                  PlaneSpotters ↗
+                </a>
+                <a
+                  href={`https://globe.adsbexchange.com/?icao=${selected.hex.toLowerCase()}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand-bright hover:underline"
+                >
+                  ADSBExchange ↗
+                </a>
+                {acInfo?.registration && (
+                  <a
+                    href={`https://www.flightradar24.com/data/aircraft/${acInfo.registration.toLowerCase()}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-brand-bright hover:underline"
+                  >
+                    FlightRadar24 ↗
+                  </a>
+                )}
+              </div>
             </div>
           ) : (
             <p className="text-sm text-muted">Click an aircraft in the table.</p>

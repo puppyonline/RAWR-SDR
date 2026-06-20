@@ -9,10 +9,12 @@
  * - POST /api/adsb/start  → start tracking
  * - POST /api/adsb/stop   → stop tracking
  * - GET  /api/adsb/aircraft → current aircraft list
+ * - GET  /api/adsb/info/:hex → aircraft details + photo (hexdb.io + PlaneSpotters.net)
  */
 
 import { Router, Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
+import https from 'https';
 
 const router = Router();
 
@@ -400,6 +402,104 @@ router.get('/aircraft', (_req: Request, res: Response) => {
     tracking: adsbProcess !== null,
     totalMessages: Array.from(aircraftMap.values()).reduce((s, a) => s + a.messages, 0),
   });
+});
+
+// ─── Aircraft Info Lookup (hexdb.io + PlaneSpotters.net) ───────────────────
+
+const ADSB_USER_AGENT = 'Airwave/2.0 (local media hub; https://github.com/puppyonline/RAWR-SDR)';
+
+interface AircraftInfo {
+  hex: string;
+  registration: string | null;
+  type: string | null;
+  icaoType: string | null;
+  manufacturer: string | null;
+  owner: string | null;
+  operatorCode: string | null;
+  photo: string | null;
+  photoLink: string | null;
+  photographer: string | null;
+}
+
+// In-memory cache for aircraft lookups (they don't change often)
+const infoCache = new Map<string, { data: AircraftInfo; ts: number }>();
+const INFO_CACHE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function fetchJSONFromUrl(url: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    https.get(url, { timeout: 8000, headers: { 'User-Agent': ADSB_USER_AGENT } }, (res) => {
+      if (res.statusCode && res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error('Invalid JSON')); }
+      });
+    }).on('error', reject);
+  });
+}
+
+async function lookupAircraft(hex: string): Promise<AircraftInfo> {
+  const cached = infoCache.get(hex);
+  if (cached && (Date.now() - cached.ts) < INFO_CACHE_MS) return cached.data;
+
+  const info: AircraftInfo = {
+    hex,
+    registration: null,
+    type: null,
+    icaoType: null,
+    manufacturer: null,
+    owner: null,
+    operatorCode: null,
+    photo: null,
+    photoLink: null,
+    photographer: null,
+  };
+
+  // Fetch aircraft details from hexdb.io (free, no key)
+  try {
+    const details = await fetchJSONFromUrl(`https://hexdb.io/api/v1/aircraft/${hex}`);
+    if (details) {
+      info.registration = details.Registration || null;
+      info.type = details.Type || null;
+      info.icaoType = details.ICAOTypeCode || null;
+      info.manufacturer = details.Manufacturer || null;
+      info.owner = details.RegisteredOwners || null;
+      info.operatorCode = details.OperatorFlagCode || null;
+    }
+  } catch { /* hexdb unavailable */ }
+
+  // Fetch photo from PlaneSpotters.net (free, needs User-Agent)
+  try {
+    const photos = await fetchJSONFromUrl(`https://api.planespotters.net/pub/photos/hex/${hex}`);
+    if (photos?.photos?.length > 0) {
+      const photo = photos.photos[0];
+      info.photo = photo.thumbnail_large?.src || photo.thumbnail?.src || null;
+      info.photoLink = photo.link || null;
+      info.photographer = photo.photographer || null;
+    }
+  } catch { /* planespotters unavailable */ }
+
+  infoCache.set(hex, { data: info, ts: Date.now() });
+  return info;
+}
+
+// GET /api/adsb/info/:hex — lookup aircraft details + photo by ICAO hex
+router.get('/info/:hex', async (req: Request, res: Response) => {
+  const hex = req.params.hex.toUpperCase();
+  if (!/^[0-9A-F]{6}$/.test(hex)) {
+    return res.status(400).json({ error: 'Invalid hex code' });
+  }
+
+  try {
+    const info = await lookupAircraft(hex);
+    res.json(info);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
