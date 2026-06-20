@@ -383,17 +383,26 @@ app.post('/api/tune', async (req, res) => {
       });
 
     } else {
-      // === AM broadcast: rtl_fm with direct sampling ===
-      // rtl_fm handles direct sampling mode correctly (-E direct)
-      // and tunes to the right frequency. We just downsample 171k->48k in Node.
+      // === AM broadcast (530-1700 kHz) via Q-branch direct sampling ===
+      // The NooElec SMArt XTR v5 (E4000) supports Q-branch direct sampling
+      // natively, bypassing the E4000 tuner entirely and sampling the RTL2832U's
+      // ADC directly. This allows reception from 100 kHz to ~14.4 MHz.
+      //
+      // In direct sampling mode:
+      // - The E4000 is switched off; the antenna connects directly to the ADC
+      // - Frequency is specified in kHz (AM broadcast band: 530-1700 kHz)
+      // - Gain setting is ignored (no tuner in the signal path)
+      // - The telescopic antenna acts as a random wire — AM signals are strong
+      //   enough that this works for local stations
+      // - Sample rate of 48k gives us the ~10 kHz AM channel bandwidth directly
+      // - DC removal is important (direct sampling has a DC offset)
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-M', 'am',
         '-f', `${frequency}k`,
-        '-s', '171k',
-        '-l', '0',
-        '-g', '30',
+        '-s', '48k',
         '-E', 'direct',
+        '-E', 'dc',
       ];
 
       console.log(`[RAWR-SDR] AM: ${rtlFm} ${args.join(' ')}`);
@@ -404,20 +413,57 @@ app.post('/api/tune', async (req, res) => {
         if (m) console.log(`[rtl_fm] ${m}`);
       });
 
-      // Downsample 171kHz -> 48kHz (same as FM/ATC)
+      // Bandpass filter for AM voice (200-4500 Hz) + gain boost
+      // AM broadcast audio is wider than NOAA but still limited
+      let amHpY1 = 0, amHpY2 = 0, amHpX1 = 0, amHpX2 = 0;
+      let amLpY1 = 0, amLpY2 = 0, amLpX1 = 0, amLpX2 = 0;
+
+      // Highpass 200 Hz (remove DC and hum)
+      const amHpW0 = 2 * Math.PI * 200 / 48000;
+      const amHpAlpha = Math.sin(amHpW0) / (2 * 0.707);
+      const amHpA0 = 1 + amHpAlpha;
+      const amHpB0 = ((1 + Math.cos(amHpW0)) / 2) / amHpA0;
+      const amHpB1 = (-(1 + Math.cos(amHpW0))) / amHpA0;
+      const amHpB2 = ((1 + Math.cos(amHpW0)) / 2) / amHpA0;
+      const amHpA1 = (-2 * Math.cos(amHpW0)) / amHpA0;
+      const amHpA2 = (1 - amHpAlpha) / amHpA0;
+
+      // Lowpass 4500 Hz (AM broadcast audio bandwidth)
+      const amLpW0 = 2 * Math.PI * 4500 / 48000;
+      const amLpAlpha = Math.sin(amLpW0) / (2 * 0.707);
+      const amLpA0 = 1 + amLpAlpha;
+      const amLpB0 = ((1 - Math.cos(amLpW0)) / 2) / amLpA0;
+      const amLpB1 = (1 - Math.cos(amLpW0)) / amLpA0;
+      const amLpB2 = ((1 - Math.cos(amLpW0)) / 2) / amLpA0;
+      const amLpA1 = (-2 * Math.cos(amLpW0)) / amLpA0;
+      const amLpA2 = (1 - amLpAlpha) / amLpA0;
+
+      // Output at 48kHz — apply bandpass filter
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
         const usable = chunk.length & ~1;
-        if (usable < 4) return;
-        const srcSamples = usable / 2;
-        const ratio = 171000 / 48000;
-        const dstSamples = Math.floor(srcSamples / ratio);
-        if (dstSamples < 1) return;
+        if (usable < 2) return;
+        const output = Buffer.alloc(usable);
 
-        const output = Buffer.alloc(dstSamples * 2);
-        for (let i = 0; i < dstSamples; i++) {
-          const srcIdx = Math.min(Math.floor(i * ratio), srcSamples - 1);
-          output.writeInt16LE(chunk.readInt16LE(srcIdx * 2), i * 2);
+        for (let i = 0; i < usable; i += 2) {
+          let x = chunk.readInt16LE(i) / 32768;
+
+          // Highpass
+          let hpY = amHpB0 * x + amHpB1 * amHpX1 + amHpB2 * amHpX2 - amHpA1 * amHpY1 - amHpA2 * amHpY2;
+          amHpX2 = amHpX1; amHpX1 = x;
+          amHpY2 = amHpY1; amHpY1 = hpY;
+
+          // Lowpass
+          let lpY = amLpB0 * hpY + amLpB1 * amLpX1 + amLpB2 * amLpX2 - amLpA1 * amLpY1 - amLpA2 * amLpY2;
+          amLpX2 = amLpX1; amLpX1 = hpY;
+          amLpY2 = amLpY1; amLpY1 = lpY;
+
+          // Gain boost (direct sampling is quieter than tuner mode)
+          const sample = Math.max(-1, Math.min(1, lpY * 3.0));
+          output.writeInt16LE(Math.round(sample * 32000), i);
         }
+
+        wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
+      });
 
         wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
       });
