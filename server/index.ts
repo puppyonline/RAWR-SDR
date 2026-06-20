@@ -9,6 +9,7 @@ import newsRouter from './news';
 import recommendationsRouter from './recommendations';
 import metadataRouter from './metadata';
 import weatherRouter from './weather';
+import adsbRouter from './adsb';
 
 const app = express();
 const PORT = 3001;
@@ -28,11 +29,11 @@ let currentMode = '';
 function detectSDR(): boolean {
   try {
     const cmd = process.platform === 'win32' ? 'rtl_test.exe' : 'rtl_test';
-    execSync(`${cmd} -t`, { timeout: 5000, stdio: 'pipe', encoding: 'utf-8' });
+    execSync(`${cmd} -d 1 -t`, { timeout: 5000, stdio: 'pipe', encoding: 'utf-8' });
     return true;
   } catch (e: any) {
     const output = (e.stderr || e.stdout || '').toString();
-    return output.includes('Found') || output.includes('RTL') || output.includes('R820');
+    return output.includes('Found') || output.includes('RTL') || output.includes('R820') || output.includes('E4000');
   }
 }
 
@@ -82,6 +83,9 @@ app.use('/api/metadata', metadataRouter);
 // NWS Weather data (current conditions, forecast, alerts)
 app.use('/api/weather', weatherRouter);
 
+// ADS-B aircraft tracking (R820T dongle, device 0)
+app.use('/api/adsb', adsbRouter);
+
 /**
  * Hybrid tuning approach:
  *
@@ -115,6 +119,7 @@ app.post('/api/tune', async (req, res) => {
       // E4000 optimal gain for FM: 29 dB (strong local signals, avoid overload)
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
+        '-d', '1',
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '171k',
@@ -195,7 +200,7 @@ app.post('/api/tune', async (req, res) => {
       // Metadata (Title, Artist, Station) comes on stderr as log lines
       const nrsc5Cmd = isWin ? 'nrsc5.exe' : 'nrsc5';
       const hdProgram = String(req.body.hdChannel || 0); // 0=HD1, 1=HD2, etc.
-      const args = ['-o', '-', '-t', 'raw', '-l', '2', `${frequency}`, hdProgram];
+      const args = ['-d', '1', '-o', '-', '-t', 'raw', '-l', '2', `${frequency}`, hdProgram];
 
       console.log(`[RAWR-SDR] HD: ${nrsc5Cmd} ${args.join(' ')}`);
       activeProcess = spawn(nrsc5Cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -274,6 +279,7 @@ app.post('/api/tune', async (req, res) => {
       // Gain 24 dB: moderate, avoids clipping while pulling in signal.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
+        '-d', '1',
         '-M', 'am',
         '-f', `${frequency}M`,
         '-s', '240k',
@@ -314,6 +320,7 @@ app.post('/api/tune', async (req, res) => {
       // Audio bandpass filter (300-3400 Hz) removes hiss outside voice band.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
+        '-d', '1',
         '-M', 'fm',
         '-f', `${frequency}M`,
         '-s', '48k',
