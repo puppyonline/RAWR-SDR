@@ -64,6 +64,31 @@ function createAircraft(hex: string): Aircraft {
   };
 }
 
+/**
+ * Mode S CRC-24 validation.
+ * Generator polynomial: x^24 + x^23 + x^10 + x^3 + 1 = 0x1FFF409
+ * For DF17/18: CRC covers bytes[0..10] (88 bits), residual XORed with ICAO
+ * should equal bytes[11..13]. Since DF17 PI field = CRC (not XOR'd with ICAO),
+ * computing CRC over all 14 bytes should yield 0.
+ */
+function validateCRC(bytes: number[]): boolean {
+  const GENERATOR = 0x1FFF409;
+  let crc = 0;
+
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= (bytes[i] << 16);
+    for (let bit = 0; bit < 8; bit++) {
+      if (crc & 0x800000) {
+        crc = ((crc << 1) ^ GENERATOR) & 0xFFFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFFFF;
+      }
+    }
+  }
+
+  return crc === 0;
+}
+
 function decodeMessage(line: string) {
   const trimmed = line.trim();
   if (!trimmed.startsWith('*') || !trimmed.endsWith(';')) return;
@@ -73,6 +98,12 @@ function decodeMessage(line: string) {
   const bytes: number[] = [];
   for (let i = 0; i < hex.length; i += 2) {
     bytes.push(parseInt(hex.slice(i, i + 2), 16));
+  }
+
+  // CRC-24 validation: reject corrupted messages to avoid garbage callsigns
+  if (hex.length === 28) {
+    // Long message (112 bits / 14 bytes): CRC covers bytes[0..10], residual in bytes[11..13]
+    if (!validateCRC(bytes)) return;
   }
 
   const df = (bytes[0] >> 3) & 0x1F;
