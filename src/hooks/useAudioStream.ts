@@ -49,11 +49,14 @@ export function useAudioStream() {
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      // Route: source -> lowpass filter -> gain -> speakers
       source.connect(filter);
 
       const currentTime = ctx.currentTime;
-      const startTime = Math.max(nextTimeRef.current, currentTime + 0.02);
+      // Keep a ~80ms lookahead buffer to absorb network jitter.
+      // If we've fallen behind, resync to now + 80ms instead of
+      // scheduling in the past (which causes crackle/pops).
+      const minStart = currentTime + 0.08;
+      const startTime = Math.max(nextTimeRef.current, minStart);
       source.start(startTime);
       nextTimeRef.current = startTime + buffer.duration;
     }
@@ -143,7 +146,8 @@ export function useAudioStream() {
       }
 
       bufferQueueRef.current.push(float32);
-      while (bufferQueueRef.current.length > 100) {
+      // Allow deeper buffer to absorb jitter; trim only when severely backed up
+      while (bufferQueueRef.current.length > 200) {
         bufferQueueRef.current.shift();
       }
       processQueue();

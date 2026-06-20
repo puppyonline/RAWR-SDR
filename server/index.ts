@@ -317,14 +317,20 @@ app.post('/api/tune', async (req, res) => {
       // === NOAA Weather Radio: narrowband FM on 162.4-162.55 MHz ===
       // NOAA uses narrowband FM with ~5kHz deviation (16kHz channel spacing).
       // E4000 offset tuning avoids DC spike contaminating the FM demod.
-      // Audio bandpass filter (300-3400 Hz) removes hiss outside voice band.
+      //
+      // Key insight: rtl_fm's internal resampler works best with sample rates
+      // that are integer multiples of the output. Using 192k (4x48k) gives
+      // rtl_fm a clean decimation path and wider capture bandwidth for the
+      // narrowband FM demod to lock onto, producing much cleaner audio.
+      // The -r flag resamples internally to 48k before output.
       const rtlFm = isWin ? 'rtl_fm.exe' : 'rtl_fm';
       const args = [
         '-d', '1',
         '-M', 'fm',
         '-f', `${frequency}M`,
-        '-s', '48k',
-        '-g', '21',
+        '-s', '192k',         // wider capture for cleaner demod
+        '-r', '48k',          // internal resample to 48k output
+        '-g', '18',           // lower gain — WXL-58 is strong at ~20mi
         '-l', '0',
         '-E', 'offset',
         '-E', 'dc',
@@ -338,13 +344,13 @@ app.post('/api/tune', async (req, res) => {
         if (m) console.log(`[rtl_fm] ${m}`);
       });
 
-      // Simple IIR bandpass filter state (300-3400 Hz at 48kHz sample rate)
-      // Using cascaded biquad: highpass at 300 Hz + lowpass at 3400 Hz
+      // Bandpass filter: 200-4000 Hz at 48kHz sample rate
+      // 2nd-order Butterworth biquads (cascaded HP + LP)
       let hpY1 = 0, hpY2 = 0, hpX1 = 0, hpX2 = 0;
       let lpY1 = 0, lpY2 = 0, lpX1 = 0, lpX2 = 0;
 
-      // Highpass 300 Hz biquad coefficients (Butterworth, fs=48000)
-      const hpW0 = 2 * Math.PI * 300 / 48000;
+      // Highpass 200 Hz (lower cutoff preserves voice fundamentals)
+      const hpW0 = 2 * Math.PI * 200 / 48000;
       const hpAlpha = Math.sin(hpW0) / (2 * 0.707);
       const hpA0 = 1 + hpAlpha;
       const hpB0 = ((1 + Math.cos(hpW0)) / 2) / hpA0;
@@ -353,8 +359,8 @@ app.post('/api/tune', async (req, res) => {
       const hpA1 = (-2 * Math.cos(hpW0)) / hpA0;
       const hpA2 = (1 - hpAlpha) / hpA0;
 
-      // Lowpass 3400 Hz biquad coefficients (Butterworth, fs=48000)
-      const lpW0 = 2 * Math.PI * 3400 / 48000;
+      // Lowpass 4000 Hz (wider than before — less muffled voice)
+      const lpW0 = 2 * Math.PI * 4000 / 48000;
       const lpAlpha = Math.sin(lpW0) / (2 * 0.707);
       const lpA0 = 1 + lpAlpha;
       const lpB0 = ((1 - Math.cos(lpW0)) / 2) / lpA0;
@@ -362,6 +368,9 @@ app.post('/api/tune', async (req, res) => {
       const lpB2 = ((1 - Math.cos(lpW0)) / 2) / lpA0;
       const lpA1 = (-2 * Math.cos(lpW0)) / lpA0;
       const lpA2 = (1 - lpAlpha) / lpA0;
+
+      // Soft-knee limiter state for smooth gain without clipping
+      let envelope = 0;
 
       activeProcess.stdout?.on('data', (chunk: Buffer) => {
         const usable = chunk.length & ~1;
@@ -371,19 +380,35 @@ app.post('/api/tune', async (req, res) => {
         for (let i = 0; i < usable; i += 2) {
           let x = chunk.readInt16LE(i) / 32768;
 
-          // Highpass (remove rumble below 300 Hz)
+          // Highpass (remove rumble/DC offset below 200 Hz)
           let hpY = hpB0 * x + hpB1 * hpX1 + hpB2 * hpX2 - hpA1 * hpY1 - hpA2 * hpY2;
           hpX2 = hpX1; hpX1 = x;
           hpY2 = hpY1; hpY1 = hpY;
 
-          // Lowpass (remove hiss above 3400 Hz)
+          // Lowpass (remove hiss above 4000 Hz)
           let lpY = lpB0 * hpY + lpB1 * lpX1 + lpB2 * lpX2 - lpA1 * lpY1 - lpA2 * lpY2;
           lpX2 = lpX1; lpX1 = hpY;
           lpY2 = lpY1; lpY1 = lpY;
 
-          // Slight gain boost (voice is quiet after filtering)
-          const sample = Math.max(-1, Math.min(1, lpY * 1.8));
-          output.writeInt16LE(Math.round(sample * 32000), i);
+          // Soft-knee limiter: gentle compression above 0.6, prevents harsh clipping
+          // This is what eliminates the crackle — voice transients get compressed
+          // instead of hard-clipped.
+          const abs = Math.abs(lpY);
+          envelope = envelope * 0.9995 + abs * 0.0005; // slow envelope follower
+          const threshold = 0.6;
+          let sample: number;
+          if (abs <= threshold) {
+            sample = lpY * 1.4; // moderate boost for quiet parts
+          } else {
+            // Soft compression above threshold (tanh-like curve)
+            const excess = abs - threshold;
+            const compressed = threshold + excess / (1 + excess * 2);
+            sample = Math.sign(lpY) * compressed * 1.4;
+          }
+
+          // Final safety clip (should rarely trigger with soft limiter)
+          sample = Math.max(-0.95, Math.min(0.95, sample));
+          output.writeInt16LE(Math.round(sample * 32767), i);
         }
 
         wss.clients.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(output); });
