@@ -128,14 +128,21 @@ function ADSBTracker() {
       const withPos = aircraft.filter((ac) => ac.lat !== null && ac.lon !== null);
       for (const ac of withPos) {
         const isSelected = selected?.hex === ac.hex;
+        const size = isSelected ? 28 : 22;
+        const color = isSelected ? '#10b981' : '#60a5fa';
         const icon = L.divIcon({
           className: '',
-          html: `<div style="transform:rotate(${ac.heading || 0}deg);font-size:${isSelected ? '22px' : '16px'};filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5))">${isSelected ? '✈️' : '🛩️'}</div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          html: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="transform:rotate(${ac.heading || 0}deg);filter:drop-shadow(0 1px 3px rgba(0,0,0,0.6))">
+            <path d="M12 2L4 14h3l1 8h8l1-8h3L12 2z" fill="${color}" stroke="#fff" stroke-width="1"/>
+          </svg>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
         });
         const marker = L.marker([ac.lat!, ac.lon!], { icon })
-          .bindTooltip(`${ac.flight || ac.hex}<br>${ac.altitude ? ac.altitude.toLocaleString() + ' ft' : 'ground'}`, { direction: 'top', offset: [0, -10] });
+          .bindTooltip(
+            `<b>${ac.flight || ac.hex}</b><br>${ac.altitude ? ac.altitude.toLocaleString() + ' ft' : 'GND'}${ac.speed ? '<br>' + ac.speed + ' kts' : ''}`,
+            { direction: 'top', offset: [0, -size / 2], className: 'leaflet-tooltip-custom' }
+          );
         marker.on('click', () => setSelected(ac));
         markersRef.current.addLayer(marker);
       }
@@ -172,26 +179,27 @@ function ADSBTracker() {
       traceLayerRef.current.clearLayers();
       if (!trace?.trace?.length) return;
 
-      const points: [number, number][] = trace.trace.map((t) => [t.lat, t.lon]);
-      if (points.length < 2) return;
+      // Only show last 30 minutes of the flight path
+      const now = Date.now() / 1000;
+      const cutoff = now - 30 * 60; // 30 minutes ago
+      const recentTrace = trace.trace.filter((t) => t.ts > cutoff);
+      if (recentTrace.length < 2) return;
 
-      // Flight path polyline
+      const points: [number, number][] = recentTrace.map((t) => [t.lat, t.lon]);
+
+      // Flight path polyline with gradient-like effect (older = more transparent)
       const polyline = L.polyline(points, {
         color: '#10b981',
-        weight: 2.5,
-        opacity: 0.8,
-        dashArray: '6 4',
+        weight: 3,
+        opacity: 0.9,
       });
       traceLayerRef.current.addLayer(polyline);
 
-      // Start/end markers
-      const startIcon = L.divIcon({ className: '', html: '<div style="font-size:12px">🟢</div>', iconSize: [16, 16], iconAnchor: [8, 8] });
-      const endIcon = L.divIcon({ className: '', html: '<div style="font-size:14px">📍</div>', iconSize: [16, 16], iconAnchor: [8, 14] });
-      traceLayerRef.current.addLayer(L.marker(points[0], { icon: startIcon }));
-      traceLayerRef.current.addLayer(L.marker(points[points.length - 1], { icon: endIcon }));
+      // Start of recent path marker
+      const startIcon = L.divIcon({ className: '', html: '<div style="width:8px;height:8px;background:#10b981;border-radius:50%;opacity:0.5"></div>', iconSize: [8, 8], iconAnchor: [4, 4] });
+      traceLayerRef.current.addLayer(L.marker(points[0], { icon: startIcon, interactive: false }));
 
-      // Fit map to trace bounds
-      leafletMap.current.fitBounds(polyline.getBounds().pad(0.1));
+      // Don't auto-zoom — the selectAircraft handler already pans to the aircraft
     });
   }, [trace]);
 
