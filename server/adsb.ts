@@ -102,13 +102,15 @@ function decodeMessage(line: string) {
     bytes.push(parseInt(hex.slice(i, i + 2), 16));
   }
 
-  // CRC-24 validation: reject corrupted messages to avoid garbage callsigns
-  if (hex.length === 28) {
-    // Long message (112 bits / 14 bytes): CRC covers bytes[0..10], residual in bytes[11..13]
+  // CRC-24 validation for DF17/18 Extended Squitter messages only.
+  // For DF17/18 the PI field is a pure CRC (not XOR'd with ICAO), so computing
+  // CRC over all 14 bytes yields 0 for valid messages.
+  // Other DFs (4/5/11/20/21) XOR the ICAO address into the PI field, so a naive
+  // CRC!=0 check would reject perfectly valid messages. We skip validation for those.
+  const df = (bytes[0] >> 3) & 0x1F;
+  if (hex.length === 28 && (df === 17 || df === 18)) {
     if (!validateCRC(bytes)) return;
   }
-
-  const df = (bytes[0] >> 3) & 0x1F;
   const icao = ((bytes[1] << 16) | (bytes[2] << 8) | bytes[3]).toString(16).toUpperCase().padStart(6, '0');
 
   if (!icao || icao === '000000') return;
