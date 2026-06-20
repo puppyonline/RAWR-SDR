@@ -86,9 +86,23 @@ function ADSBTracker() {
 
   // Initialize Leaflet map
   useEffect(() => {
-    if (!mapRef.current || leafletMap.current) return;
+    if (!mapRef.current) return;
+    // Avoid double-init in React StrictMode
+    if (mapRef.current.hasAttribute('data-leaflet-init')) return;
+    mapRef.current.setAttribute('data-leaflet-init', 'true');
+
+    let map: any = null;
     import('leaflet').then((L) => {
-      const map = L.map(mapRef.current!, { zoomControl: true }).setView([33.4152, -111.8315], 9);
+      if (!mapRef.current) return;
+      // Import Leaflet CSS
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      map = L.map(mapRef.current, { zoomControl: true }).setView([33.4152, -111.8315], 9);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 18,
@@ -96,9 +110,13 @@ function ADSBTracker() {
       leafletMap.current = map;
       markersRef.current = L.layerGroup().addTo(map);
       traceLayerRef.current = L.layerGroup().addTo(map);
+      // Fix tile rendering after container is visible
+      setTimeout(() => map.invalidateSize(), 100);
     });
+
     return () => {
-      if (leafletMap.current) { leafletMap.current.remove(); leafletMap.current = null; }
+      if (map) { map.remove(); leafletMap.current = null; markersRef.current = null; traceLayerRef.current = null; }
+      if (mapRef.current) mapRef.current.removeAttribute('data-leaflet-init');
     };
   }, []);
 
