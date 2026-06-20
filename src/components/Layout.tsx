@@ -9,7 +9,7 @@ const navLinks = [
   { path: '/tv', label: 'Live TV' },
   { path: '/guide', label: 'TV Guide' },
   { path: '/atc', label: 'ATC' },
-  { path: '/weather', label: 'Weather' },
+  { path: '/weather', label: 'Environment' },
   { path: '/adsb', label: 'ADS-B' },
 ];
 
