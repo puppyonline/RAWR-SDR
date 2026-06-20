@@ -1,217 +1,370 @@
 /**
- * ADS-B Aircraft Tracker using dump1090 + R820T dongle (device 0).
+ * ADS-B Aircraft Tracker using rtl_adsb + R820T dongle (device 0).
  *
- * dump1090 is a full Mode S decoder with error correction, CPR position
- * decoding, and multi-message correlation. It serves decoded aircraft
- * data as JSON over HTTP which we poll.
- *
- * Setup: download dump1090 for Windows from:
- * https://github.com/gvanem/Dump1090/releases or
- * https://github.com/tpainter/dump1090_win/releases
- * Place dump1090.exe in PATH or the project root.
+ * rtl_adsb comes with the rtl-sdr package (already installed).
+ * We decode Mode S messages with a comprehensive JavaScript parser
+ * that handles all Extended Squitter message types.
  *
  * API:
- * - POST /api/adsb/start  → launch dump1090 on device 0
- * - POST /api/adsb/stop   → kill dump1090
- * - GET  /api/adsb/aircraft → current aircraft (from dump1090 JSON)
+ * - POST /api/adsb/start  → start tracking
+ * - POST /api/adsb/stop   → stop tracking
+ * - GET  /api/adsb/aircraft → current aircraft list
  */
 
 import { Router, Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
-import http from 'http';
 
 const router = Router();
 
-let dump1090Process: ChildProcess | null = null;
-let lastAircraftData: any = null;
-let lastFetchTime = 0;
-const POLL_INTERVAL = 800; // ms between polls to dump1090
+// ─── Aircraft State ────────────────────────────────────────────────────────
 
-// dump1090 serves JSON at http://localhost:8080/data/aircraft.json (newer forks)
-// or http://localhost:8080/data.json (original antirez version)
-const DUMP1090_URLS = [
-  'http://localhost:8080/data/aircraft.json',
-  'http://localhost:8080/data.json',
-  'http://localhost:30003/', // SBS format fallback (we won't use this)
-];
-
-function fetchDump1090Data(): Promise<any> {
-  return new Promise((resolve, reject) => {
-    // Try the standard aircraft.json endpoint
-    const url = 'http://localhost:8080/data/aircraft.json';
-    http.get(url, { timeout: 2000 }, (res) => {
-      if (res.statusCode !== 200) {
-        // Try alternate URL
-        http.get('http://localhost:8080/data.json', { timeout: 2000 }, (res2) => {
-          let d = '';
-          res2.on('data', (chunk) => { d += chunk; });
-          res2.on('end', () => {
-            try { resolve(JSON.parse(d)); }
-            catch { reject(new Error('Invalid JSON')); }
-          });
-        }).on('error', reject);
-        return;
-      }
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { reject(new Error('Invalid JSON')); }
-      });
-    }).on('error', (err) => {
-      // Try alternate
-      http.get('http://localhost:8080/data.json', { timeout: 2000 }, (res2) => {
-        if (res2.statusCode !== 200) { reject(err); return; }
-        let d = '';
-        res2.on('data', (chunk) => { d += chunk; });
-        res2.on('end', () => {
-          try { resolve(JSON.parse(d)); }
-          catch { reject(new Error('Invalid JSON')); }
-        });
-      }).on('error', reject);
-    });
-  });
+interface Aircraft {
+  hex: string;
+  flight: string;
+  lat: number | null;
+  lon: number | null;
+  altitude: number | null;
+  speed: number | null;
+  heading: number | null;
+  verticalRate: number | null;
+  squawk: string;
+  seen: number;
+  messages: number;
+  rssi: number | null;
+  category: string;
+  lastUpdate: number;
+  // CPR position decoding state
+  cprEvenLat: number | null;
+  cprEvenLon: number | null;
+  cprOddLat: number | null;
+  cprOddLon: number | null;
+  cprEvenTime: number | null;
+  cprOddTime: number | null;
 }
 
-// Background polling of dump1090's JSON
-let pollInterval: ReturnType<typeof setInterval> | null = null;
+let adsbProcess: ChildProcess | null = null;
+const aircraftMap = new Map<string, Aircraft>();
 
-function startPolling() {
-  if (pollInterval) return;
-  pollInterval = setInterval(async () => {
-    try {
-      const data = await fetchDump1090Data();
-      lastAircraftData = data;
-      lastFetchTime = Date.now();
-    } catch {
-      // dump1090 might not be ready yet, or using different format
+// ─── Mode S Decoder ────────────────────────────────────────────────────────
+
+const CHARSET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ##### ###############0123456789######';
+
+function createAircraft(hex: string): Aircraft {
+  return {
+    hex, flight: '', lat: null, lon: null, altitude: null,
+    speed: null, heading: null, verticalRate: null, squawk: '',
+    seen: 0, messages: 0, rssi: null, category: '',
+    lastUpdate: Date.now(),
+    cprEvenLat: null, cprEvenLon: null,
+    cprOddLat: null, cprOddLon: null,
+    cprEvenTime: null, cprOddTime: null,
+  };
+}
+
+function decodeMessage(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('*') || !trimmed.endsWith(';')) return;
+  const hex = trimmed.slice(1, -1);
+  if (hex.length < 14) return;
+
+  const bytes: number[] = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes.push(parseInt(hex.slice(i, i + 2), 16));
+  }
+
+  const df = (bytes[0] >> 3) & 0x1F;
+  const icao = ((bytes[1] << 16) | (bytes[2] << 8) | bytes[3]).toString(16).toUpperCase().padStart(6, '0');
+
+  if (!icao || icao === '000000') return;
+
+  let ac = aircraftMap.get(icao);
+  if (!ac) {
+    ac = createAircraft(icao);
+    aircraftMap.set(icao, ac);
+  }
+  ac.messages++;
+  ac.lastUpdate = Date.now();
+  ac.seen = 0;
+
+  if (hex.length < 28) {
+    // Short message (56 bits) - DF4/5/11
+    if (df === 4 || df === 20) {
+      // Altitude reply
+      ac.altitude = decodeAC13(bytes);
+    } else if (df === 5 || df === 21) {
+      // Squawk
+      ac.squawk = decodeSquawk(bytes);
     }
-  }, POLL_INTERVAL);
-}
+    return;
+  }
 
-function stopPolling() {
-  if (pollInterval) {
-    clearInterval(pollInterval);
-    pollInterval = null;
+  // Long message (112 bits) - DF17/18 Extended Squitter
+  if (df === 17 || df === 18) {
+    const me = bytes.slice(4, 11); // Message Extended (7 bytes = 56 bits)
+    const typeCode = (me[0] >> 3) & 0x1F;
+
+    if (typeCode >= 1 && typeCode <= 4) {
+      // Aircraft identification
+      ac.category = `${typeCode}/${me[0] & 0x07}`;
+      const c1 = (me[1] >> 2) & 0x3F;
+      const c2 = ((me[1] & 0x03) << 4) | ((me[2] >> 4) & 0x0F);
+      const c3 = ((me[2] & 0x0F) << 2) | ((me[3] >> 6) & 0x03);
+      const c4 = me[3] & 0x3F;
+      const c5 = (me[4] >> 2) & 0x3F;
+      const c6 = ((me[4] & 0x03) << 4) | ((me[5] >> 4) & 0x0F);
+      const c7 = ((me[5] & 0x0F) << 2) | ((me[6] >> 6) & 0x03);
+      const c8 = me[6] & 0x3F;
+      ac.flight = [c1, c2, c3, c4, c5, c6, c7, c8]
+        .map((c) => CHARSET[c] || ' ')
+        .join('')
+        .trim();
+
+    } else if (typeCode >= 9 && typeCode <= 18) {
+      // Airborne position (barometric altitude)
+      ac.altitude = decodeAC12((me[1] << 4) | (me[2] >> 4));
+
+      // CPR encoded position
+      const flag = (me[2] >> 2) & 1; // 0=even, 1=odd
+      const rawLat = ((me[2] & 0x03) << 15) | (me[3] << 7) | (me[4] >> 1);
+      const rawLon = ((me[4] & 0x01) << 16) | (me[5] << 8) | me[6];
+
+      if (flag === 0) {
+        ac.cprEvenLat = rawLat;
+        ac.cprEvenLon = rawLon;
+        ac.cprEvenTime = Date.now();
+      } else {
+        ac.cprOddLat = rawLat;
+        ac.cprOddLon = rawLon;
+        ac.cprOddTime = Date.now();
+      }
+
+      // Attempt CPR global decode if we have both even and odd
+      decodeCPR(ac);
+
+    } else if (typeCode === 19) {
+      // Airborne velocity
+      const subtype = me[0] & 0x07;
+      if (subtype === 1 || subtype === 2) {
+        // Ground speed
+        const ewDir = (me[1] >> 2) & 1;
+        const ewV = ((me[1] & 0x03) << 8) | me[2];
+        const nsDir = (me[3] >> 7) & 1;
+        const nsV = ((me[3] & 0x7F) << 3) | (me[4] >> 5);
+
+        const ewVel = ewDir ? -(ewV - 1) : (ewV - 1);
+        const nsVel = nsDir ? -(nsV - 1) : (nsV - 1);
+
+        if (ewV && nsV) {
+          ac.speed = Math.round(Math.sqrt(ewVel * ewVel + nsVel * nsVel));
+          ac.heading = Math.round((Math.atan2(ewVel, nsVel) * 180 / Math.PI + 360) % 360);
+        }
+
+        // Vertical rate
+        const vrSign = (me[4] >> 3) & 1;
+        const vrVal = ((me[4] & 0x07) << 6) | (me[5] >> 2);
+        if (vrVal) {
+          ac.verticalRate = (vrSign ? -(vrVal - 1) : (vrVal - 1)) * 64;
+        }
+      }
+
+    } else if (typeCode >= 20 && typeCode <= 22) {
+      // Airborne position (GNSS altitude)
+      const rawAlt = ((me[1] << 4) | (me[2] >> 4));
+      ac.altitude = rawAlt; // GNSS altitude in feet
+
+      const flag = (me[2] >> 2) & 1;
+      const rawLat = ((me[2] & 0x03) << 15) | (me[3] << 7) | (me[4] >> 1);
+      const rawLon = ((me[4] & 0x01) << 16) | (me[5] << 8) | me[6];
+
+      if (flag === 0) {
+        ac.cprEvenLat = rawLat;
+        ac.cprEvenLon = rawLon;
+        ac.cprEvenTime = Date.now();
+      } else {
+        ac.cprOddLat = rawLat;
+        ac.cprOddLon = rawLon;
+        ac.cprOddTime = Date.now();
+      }
+      decodeCPR(ac);
+    }
+  } else if (df === 4 || df === 20) {
+    ac.altitude = decodeAC13(bytes);
+  } else if (df === 5 || df === 21) {
+    ac.squawk = decodeSquawk(bytes);
   }
 }
 
-// POST /api/adsb/start
+// Decode 13-bit altitude code (DF4/20)
+function decodeAC13(bytes: number[]): number | null {
+  const ac13 = ((bytes[2] & 0x1F) << 8) | bytes[3];
+  const mBit = (ac13 >> 6) & 1;
+  const qBit = (ac13 >> 4) & 1;
+
+  if (!mBit && qBit) {
+    const n = ((ac13 >> 5) << 4) | (ac13 & 0x0F);
+    return n * 25 - 1000;
+  }
+  return null;
+}
+
+// Decode 12-bit altitude code (Extended Squitter)
+function decodeAC12(ac12: number): number | null {
+  const qBit = (ac12 >> 4) & 1;
+  if (qBit) {
+    const n = ((ac12 >> 5) << 4) | (ac12 & 0x0F);
+    return n * 25 - 1000;
+  }
+  return null;
+}
+
+// Decode squawk (Gillham code)
+function decodeSquawk(bytes: number[]): string {
+  const id13 = ((bytes[2] & 0x1F) << 8) | bytes[3];
+  // Extract A/B/C/D digits
+  const a4 = (id13 >> 11) & 1; const a2 = (id13 >> 9) & 1; const a1 = (id13 >> 10) & 1;
+  const b4 = (id13 >> 5) & 1; const b2 = (id13 >> 3) & 1; const b1 = (id13 >> 4) & 1;
+  const c4 = (id13 >> 0) & 1; const c2 = (id13 >> 2) & 1; const c1 = (id13 >> 1) & 1;
+  const d4 = (id13 >> 8) & 1; const d2 = (id13 >> 6) & 1; const d1 = (id13 >> 7) & 1;
+  return `${a4*4+a2*2+a1}${b4*4+b2*2+b1}${c4*4+c2*2+c1}${d4*4+d2*2+d1}`;
+}
+
+// CPR global position decode
+function decodeCPR(ac: Aircraft) {
+  if (ac.cprEvenLat === null || ac.cprOddLat === null ||
+      ac.cprEvenLon === null || ac.cprOddLon === null ||
+      ac.cprEvenTime === null || ac.cprOddTime === null) return;
+
+  // Must have both within 10 seconds
+  if (Math.abs(ac.cprEvenTime - ac.cprOddTime) > 10000) return;
+
+  const cprLatEven = ac.cprEvenLat / 131072.0;
+  const cprLatOdd = ac.cprOddLat / 131072.0;
+  const cprLonEven = ac.cprEvenLon / 131072.0;
+  const cprLonOdd = ac.cprOddLon / 131072.0;
+
+  const dLatEven = 360.0 / 60;
+  const dLatOdd = 360.0 / 59;
+
+  const j = Math.floor(59 * cprLatEven - 60 * cprLatOdd + 0.5);
+
+  let latEven = dLatEven * ((j % 60) + cprLatEven);
+  let latOdd = dLatOdd * ((j % 59) + cprLatOdd);
+
+  if (latEven >= 270) latEven -= 360;
+  if (latOdd >= 270) latOdd -= 360;
+
+  // Use the most recent one
+  const useEven = ac.cprEvenTime > ac.cprOddTime;
+  const lat = useEven ? latEven : latOdd;
+
+  // Longitude
+  const nlLat = NL(lat);
+  const ni = Math.max(1, useEven ? nlLat : nlLat - 1);
+  const dLon = 360.0 / ni;
+  const m = Math.floor(
+    (useEven ? cprLonEven : cprLonOdd) * (nlLat - 1) -
+    (useEven ? cprLonOdd : cprLonEven) * nlLat + 0.5
+  );
+  let lon = dLon * ((m % ni + ni) % ni + (useEven ? cprLonEven : cprLonOdd));
+  if (lon >= 180) lon -= 360;
+
+  // Sanity check (roughly near Arizona)
+  if (lat > -90 && lat < 90 && lon > -180 && lon < 180) {
+    ac.lat = Math.round(lat * 10000) / 10000;
+    ac.lon = Math.round(lon * 10000) / 10000;
+  }
+}
+
+// NL function for CPR latitude zones
+function NL(lat: number): number {
+  if (Math.abs(lat) >= 87) return 1;
+  const nz = 15;
+  const a = 1 - Math.cos(Math.PI / (2 * nz));
+  const b = Math.cos(Math.PI / 180 * Math.abs(lat));
+  return Math.floor(2 * Math.PI / Math.acos(1 - a / (b * b)));
+}
+
+// ─── Routes ────────────────────────────────────────────────────────────────
+
 router.post('/start', (_req: Request, res: Response) => {
-  if (dump1090Process) {
-    return res.json({ status: 'already running' });
+  if (adsbProcess) {
+    return res.json({ status: 'already running', aircraft: aircraftMap.size });
   }
 
   const isWin = process.platform === 'win32';
-  const cmd = isWin ? 'dump1090.exe' : 'dump1090';
+  const cmd = isWin ? 'rtl_adsb.exe' : 'rtl_adsb';
 
-  // Launch dump1090 with:
-  // --device-index 0: R820T Mini
-  // --gain 42: max gain for weak 1090 MHz signals
-  // --net: enable HTTP/JSON output on port 8080
-  // --net-http-port 8080: explicit port
-  // --quiet: suppress interactive output
-  // --fix: enable error correction (1-bit and 2-bit)
-  // --aggressive: use more aggressive message decoding
-  const args = [
-    '--device-index', '0',
-    '--gain', '42',
-    '--net',
-    '--net-http-port', '8080',
-    '--quiet',
-    '--fix',
-    '--aggressive',
-  ];
+  // Device 0 = R820T Mini, gain 42 dB (max for 1090 MHz)
+  adsbProcess = spawn(cmd, ['-d', '0', '-g', '42'], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-  console.log(`[ADS-B] Starting: ${cmd} ${args.join(' ')}`);
-  dump1090Process = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  adsbProcess.stdout?.on('data', (data: Buffer) => {
+    const lines = data.toString().split('\n');
+    for (const line of lines) {
+      if (line.trim()) decodeMessage(line);
+    }
+  });
 
-  dump1090Process.stderr?.on('data', (data: Buffer) => {
+  adsbProcess.stderr?.on('data', (data: Buffer) => {
     const msg = data.toString().trim();
-    if (msg && !msg.includes('Hex')) console.log(`[ADS-B] ${msg.slice(0, 100)}`);
+    if (msg) console.log(`[ADS-B] ${msg}`);
   });
 
-  dump1090Process.stdout?.on('data', (data: Buffer) => {
-    const msg = data.toString().trim();
-    if (msg && msg.includes('Aircraft')) console.log(`[ADS-B] ${msg.slice(0, 80)}`);
+  adsbProcess.on('error', (err) => {
+    console.error(`[ADS-B] Error: ${err.message}`);
+    adsbProcess = null;
   });
 
-  dump1090Process.on('error', (err) => {
-    console.error(`[ADS-B] Failed to start dump1090: ${err.message}`);
-    console.error('[ADS-B] Make sure dump1090.exe is in PATH or project root');
-    dump1090Process = null;
+  adsbProcess.on('close', (code) => {
+    console.log(`[ADS-B] Exited (code ${code})`);
+    adsbProcess = null;
   });
 
-  dump1090Process.on('close', (code) => {
-    console.log(`[ADS-B] dump1090 exited (code ${code})`);
-    dump1090Process = null;
-    stopPolling();
-  });
-
-  // Start polling after a short delay to let dump1090 initialize
-  setTimeout(() => startPolling(), 1500);
-
+  console.log('[ADS-B] Started (R820T, device 0, 1090 MHz, gain 42)');
   res.json({ status: 'started' });
 });
 
-// POST /api/adsb/stop
 router.post('/stop', (_req: Request, res: Response) => {
-  if (dump1090Process) {
-    dump1090Process.kill('SIGTERM');
-    // On Windows, SIGTERM doesn't always work
-    setTimeout(() => {
-      if (dump1090Process) {
-        try { dump1090Process.kill('SIGKILL'); } catch {}
-      }
-    }, 2000);
-    dump1090Process = null;
-    stopPolling();
-    lastAircraftData = null;
+  if (adsbProcess) {
+    adsbProcess.kill('SIGTERM');
+    adsbProcess = null;
+    aircraftMap.clear();
     console.log('[ADS-B] Stopped');
   }
   res.json({ status: 'stopped' });
 });
 
-// GET /api/adsb/aircraft
 router.get('/aircraft', (_req: Request, res: Response) => {
-  if (!dump1090Process) {
-    return res.json({ count: 0, aircraft: [], tracking: false, messages: 0 });
+  // Update seen times and clean stale
+  const now = Date.now();
+  for (const [hex, ac] of aircraftMap) {
+    ac.seen = Math.round((now - ac.lastUpdate) / 1000);
+    if (ac.seen > 60) aircraftMap.delete(hex);
   }
 
-  if (!lastAircraftData) {
-    return res.json({ count: 0, aircraft: [], tracking: true, messages: 0 });
-  }
-
-  // dump1090 JSON format varies by fork but typically:
-  // { aircraft: [...], messages: N, now: timestamp }
-  // Each aircraft: { hex, flight, lat, lon, altitude, speed, track, squawk, seen, messages, ... }
-  const raw = lastAircraftData;
-  const aircraftList = (raw.aircraft || raw || [])
-    .filter((ac: any) => ac.hex && ac.seen < 60)
-    .map((ac: any) => ({
-      hex: (ac.hex || '').toUpperCase(),
-      flight: (ac.flight || '').trim(),
-      lat: ac.lat ?? ac.latitude ?? null,
-      lon: ac.lon ?? ac.longitude ?? null,
-      altitude: ac.altitude ?? ac.alt_baro ?? ac.alt ?? null,
-      speed: ac.speed ?? ac.gs ?? null,
-      heading: ac.track ?? ac.heading ?? null,
-      verticalRate: ac.vert_rate ?? ac.vr ?? null,
-      squawk: ac.squawk || '',
-      seen: ac.seen ?? 0,
-      messages: ac.messages ?? ac.msgs ?? 0,
-      rssi: ac.rssi ?? null,
-      category: ac.category || '',
-      emergency: ac.emergency || '',
-    }))
-    .sort((a: any, b: any) => a.seen - b.seen);
+  const list = Array.from(aircraftMap.values())
+    .filter((ac) => ac.messages > 1)
+    .sort((a, b) => a.seen - b.seen)
+    .map((ac) => ({
+      hex: ac.hex,
+      flight: ac.flight,
+      lat: ac.lat,
+      lon: ac.lon,
+      altitude: ac.altitude,
+      speed: ac.speed,
+      heading: ac.heading,
+      verticalRate: ac.verticalRate,
+      squawk: ac.squawk,
+      seen: ac.seen,
+      messages: ac.messages,
+      rssi: ac.rssi,
+      category: ac.category,
+    }));
 
   res.json({
-    count: aircraftList.length,
-    aircraft: aircraftList,
-    tracking: true,
-    messages: raw.messages || 0,
-    lastUpdate: lastFetchTime,
+    count: list.length,
+    aircraft: list,
+    tracking: adsbProcess !== null,
+    totalMessages: Array.from(aircraftMap.values()).reduce((s, a) => s + a.messages, 0),
   });
 });
 
