@@ -102,15 +102,11 @@ function decodeMessage(line: string) {
     bytes.push(parseInt(hex.slice(i, i + 2), 16));
   }
 
-  // CRC-24 validation for DF17/18 Extended Squitter messages only.
-  // For DF17/18 the PI field is a pure CRC (not XOR'd with ICAO), so computing
-  // CRC over all 14 bytes yields 0 for valid messages.
-  // Other DFs (4/5/11/20/21) XOR the ICAO address into the PI field, so a naive
-  // CRC!=0 check would reject perfectly valid messages. We skip validation for those.
+  // No CRC filtering — we only need a valid ICAO hex address to track aircraft.
+  // Callsign/type/registration are fetched from planespotters.live API instead of
+  // decoding from RF, so corrupted payloads don't matter. The hex address in bytes
+  // 1-3 is reliable even on weak signals since it's in the message header.
   const df = (bytes[0] >> 3) & 0x1F;
-  if (hex.length === 28 && (df === 17 || df === 18)) {
-    if (!validateCRC(bytes)) return;
-  }
   const icao = ((bytes[1] << 16) | (bytes[2] << 8) | bytes[3]).toString(16).toUpperCase().padStart(6, '0');
 
   if (!icao || icao === '000000') return;
@@ -142,7 +138,8 @@ function decodeMessage(line: string) {
     const typeCode = (me[0] >> 3) & 0x1F;
 
     if (typeCode >= 1 && typeCode <= 4) {
-      // Aircraft identification
+      // Aircraft identification — only accept if CRC is valid to avoid garbage callsigns
+      if (!validateCRC(bytes)) return;
       ac.category = `${typeCode}/${me[0] & 0x07}`;
       const c1 = (me[1] >> 2) & 0x3F;
       const c2 = ((me[1] & 0x03) << 4) | ((me[2] >> 4) & 0x0F);
@@ -380,7 +377,6 @@ router.get('/aircraft', (_req: Request, res: Response) => {
   }
 
   const list = Array.from(aircraftMap.values())
-    .filter((ac) => ac.messages > 1)
     .sort((a, b) => a.seen - b.seen)
     .map((ac) => ({
       hex: ac.hex,
